@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams } from "react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -68,20 +68,47 @@ function PosPage() {
   const cartTotal = useCart((s) => s.total());
 
   const [query, setQuery] = useState(q);
-  useEffect(() => setQuery(q), [q]);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Sinkronisasi state lokal dengan parameter URL jika berubah dari luar (misal: tombol Bersih)
+  useEffect(() => {
+    setQuery(q);
+  }, [q]);
 
   const productsQ = useQuery({
     queryKey: ["products", q],
     queryFn: () => productsApi.getProducts({ q }),
   });
 
-  function applyQuery(next: string) {
+  const applyQuery = useCallback((next: string) => {
     if (next) {
       setSearchParams({ q: next }, { replace: true });
     } else {
       setSearchParams({}, { replace: true });
     }
-  }
+  }, [setSearchParams]);
+
+  // Implementasi Debounced Search: Update URL hanya setelah user berhenti mengetik selama 300ms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (query !== q) {
+        applyQuery(query);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, q, applyQuery]);
+
+  // Implementasi Shortcut Ctrl+K untuk fokus ke search bar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Payment modal state
   const [payOpen, setPayOpen] = useState(false);
@@ -99,12 +126,10 @@ function PosPage() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              ref={searchInputRef}
               value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                applyQuery(e.target.value);
-              }}
-            placeholder="Cari produk..."
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cari produk... (Ctrl+K)"
               className="pl-9"
             />
           </div>

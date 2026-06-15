@@ -1,5 +1,6 @@
+import { useSearchParams } from "react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -52,10 +53,49 @@ export function meta() {
 
 function CashiersPage() {
   const qc = useQueryClient();
-  const [q, setQ] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const q = searchParams.get("q") || "";
+  const [query, setQuery] = useState(q);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const [editing, setEditing] = useState<Cashier | null>(null);
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Cashier | null>(null);
+
+  const applyQuery = useCallback((next: string) => {
+    if (next) {
+      setSearchParams({ q: next }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  }, [setSearchParams]);
+
+  // Sinkronisasi state lokal dengan URL
+  useEffect(() => {
+    setQuery(q);
+  }, [q]);
+
+  // Implementasi Debounced Search (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (query !== q) {
+        applyQuery(query);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, q, applyQuery]);
+
+  // Shortcut Ctrl+K
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "cashiers", q],
@@ -110,14 +150,22 @@ function CashiersPage() {
         </Button>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Cari berdasarkan nama atau email"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            ref={searchInputRef}
+            placeholder="Cari berdasarkan nama atau email... (Ctrl+K)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {q && (
+          <Button variant="ghost" onClick={() => applyQuery("")}>
+            Atur Ulang
+          </Button>
+        )}
       </div>
 
       <Card>

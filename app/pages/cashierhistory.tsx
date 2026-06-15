@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { Search, Receipt } from "lucide-react";
@@ -37,7 +37,8 @@ function HistoryPage() {
   const user = useAuth((s) => s.user);
   const [query, setQuery] = useState(q);
   const [openTx, setOpenTx] = useState<Transaction | null>(null);
-  useEffect(() => setQuery(q), [q]);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const today = new Date().toISOString().slice(0, 10);
   const txQ = useQuery({
@@ -47,13 +48,40 @@ function HistoryPage() {
     enabled: !!user,
   });
 
-  function setQ(next: string) {
+  const applyQuery = useCallback((next: string) => {
     if (next) {
       setSearchParams({ q: next }, { replace: true });
     } else {
       setSearchParams({}, { replace: true });
     }
-  }
+  }, [setSearchParams]);
+
+  // Sinkronisasi state lokal dengan parameter URL
+  useEffect(() => {
+    setQuery(q);
+  }, [q]);
+
+  // Implementasi Debounced Search (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (query !== q) {
+        applyQuery(query);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, q, applyQuery]);
+
+  // Implementasi Shortcut Ctrl+K
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
@@ -66,17 +94,15 @@ function HistoryPage() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={searchInputRef}
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setQ(e.target.value);
-            }}
-            placeholder="Cari ID transaksi"
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Cari ID transaksi... (Ctrl+K)"
             className="pl-9 font-mono"
           />
         </div>
         {q && (
-          <Button variant="ghost" onClick={() => setQ("")}>
+          <Button variant="ghost" onClick={() => applyQuery("")}>
             Atur Ulang
           </Button>
         )}

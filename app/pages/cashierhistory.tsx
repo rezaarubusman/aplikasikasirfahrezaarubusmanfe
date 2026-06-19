@@ -3,7 +3,6 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { Search, Receipt } from "lucide-react";
-
 import { Input } from "~/components/ui/input";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
@@ -17,7 +16,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-
 import { txApi, type Transaction } from "~/api/transactions";
 import { rupiah } from "~/api";
 import { useAuth } from "~/stores/auth";
@@ -30,7 +28,7 @@ export function meta() {
   return [{ title: "Transaksi Hari Ini — Aplikasi Kasir" }];
 }
 
-function HistoryPage() {
+const HistoryPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q") || "";
   const navigate = useNavigate();
@@ -56,12 +54,10 @@ function HistoryPage() {
     }
   }, [setSearchParams]);
 
-  // Sinkronisasi state lokal dengan parameter URL
   useEffect(() => {
     setQuery(q);
   }, [q]);
 
-  // Implementasi Debounced Search (300ms)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (query !== q) {
@@ -71,7 +67,6 @@ function HistoryPage() {
     return () => clearTimeout(timer);
   }, [query, q, applyQuery]);
 
-  // Implementasi Shortcut Ctrl+K
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
@@ -222,7 +217,7 @@ function HistoryPage() {
   );
 }
 
-function RowDetail({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+const RowDetail = ({ label, value, strong }: { label: string; value: string; strong?: boolean }) => {
   return (
     <div className="flex items-center justify-between">
       <span className="text-muted-foreground">{label}</span>

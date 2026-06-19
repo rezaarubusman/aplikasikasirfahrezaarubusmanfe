@@ -6,7 +6,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { Search, Plus, Minus, Trash2, CreditCard, Banknote, Loader2, Receipt, ShoppingCart } from "lucide-react";
-
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -32,7 +31,6 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/tabs";
-
 import { productsApi, type Product } from "~/api/products";
 import { txApi, type Transaction } from "~/api/transactions";
 import { rupiah } from "~/api";
@@ -48,14 +46,13 @@ export function meta() {
   return [{ title: "POS — Aplikasi Kasir" }];
 }
 
-function PosPage() {
+const PosPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q") || "";
   const user = useAuth((s) => s.user);
   const shift = useShift((s) => s.active);
 
-  // Redirect away if no active shift
   useEffect(() => {
     if (!shift) navigate("/");
   }, [shift, navigate]);
@@ -70,7 +67,6 @@ function PosPage() {
   const [query, setQuery] = useState(q);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Sinkronisasi state lokal dengan parameter URL jika berubah dari luar (misal: tombol Bersih)
   useEffect(() => {
     setQuery(q);
   }, [q]);
@@ -88,7 +84,6 @@ function PosPage() {
     }
   }, [setSearchParams]);
 
-  // Implementasi Debounced Search: Update URL hanya setelah user berhenti mengetik selama 300ms
   useEffect(() => {
     const timer = setTimeout(() => {
       if (query !== q) {
@@ -98,7 +93,6 @@ function PosPage() {
     return () => clearTimeout(timer);
   }, [query, q, applyQuery]);
 
-  // Implementasi Shortcut Ctrl+K untuk fokus ke search bar
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
@@ -110,7 +104,6 @@ function PosPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Payment modal state
   const [payOpen, setPayOpen] = useState(false);
   const [paymentType, setPaymentType] = useState<"cash" | "debit">("cash");
   const [confirmPayOpen, setConfirmPayOpen] = useState(false);
@@ -332,7 +325,7 @@ type PendingPayment = {
 };
 const pendingPaymentRef: { current: PendingPayment | null } = { current: null };
 
-function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }) {
+const ProductCard = ({ product, onAdd }: { product: Product; onAdd: () => void }) => {
   const out = product.stock <= 0;
   return (
     <button
@@ -376,7 +369,7 @@ const debitSchema = z.object({
     .regex(/^\d{16}$/, "Harus 16 digit"),
 });
 
-function PaymentDialog({
+const PaymentDialog = ({
   open,
   onOpenChange,
   total,
@@ -390,7 +383,7 @@ function PaymentDialog({
   paymentType: "cash" | "debit";
   setPaymentType: (p: "cash" | "debit") => void;
   onSubmit: (p: PendingPayment) => void;
-}) {
+}) => {
   const cashForm = useForm<{ cashReceived: number }>({
     resolver: zodResolver(cashSchema) as any,
     defaultValues: { cashReceived: total },
@@ -414,7 +407,7 @@ function PaymentDialog({
   const change = Math.max((Number(cashReceived) || 0) - total, 0);
   const cashValid = (Number(cashReceived) || 0) >= total;
 
-  function handlePay() {
+  const handlePay = () => {
     if (paymentType === "cash") {
       if (!cashValid) {
         cashForm.setError("cashReceived", { message: "Harus setidaknya sebesar total" });
@@ -492,7 +485,7 @@ function PaymentDialog({
   );
 }
 
-function ConfirmPayment({
+const ConfirmPayment = ({
   open,
   onOpenChange,
   onConfirm,
@@ -500,7 +493,7 @@ function ConfirmPayment({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onConfirm: () => Promise<void>;
-}) {
+}) => {
   const [busy, setBusy] = useState(false);
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -531,7 +524,7 @@ function ConfirmPayment({
   );
 }
 
-function ReceiptDialog({ tx, onClose }: { tx: Transaction | null; onClose: () => void }) {
+const ReceiptDialog = ({ tx, onClose }: { tx: Transaction | null; onClose: () => void }) => {
   return (
     <Dialog open={!!tx} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-sm">
@@ -574,7 +567,7 @@ function ReceiptDialog({ tx, onClose }: { tx: Transaction | null; onClose: () =>
   );
 }
 
-function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+const Row = ({ label, value, strong }: { label: string; value: string; strong?: boolean }) => {
   return (
     <div className="flex items-center justify-between">
       <span className="text-muted-foreground">{label}</span>
@@ -583,7 +576,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   );
 }
 
-function EmptyState({
+const EmptyState= ({
   icon,
   title,
   description,
@@ -591,7 +584,7 @@ function EmptyState({
   icon: React.ReactNode;
   title: string;
   description: string;
-}) {
+}) => {
   return (
     <Card>
       <CardContent className="flex flex-col items-center justify-center gap-2 py-12 text-center">

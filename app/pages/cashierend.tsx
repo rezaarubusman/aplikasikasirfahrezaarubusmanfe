@@ -90,15 +90,15 @@ const EndShiftPage = () => {
   const difference = Number(closing || 0) - expectedClosing;
   const differenceState = difference === 0 ? "balanced" : difference > 0 ? "over" : "short";
   const startedAt = useMemo(() => {
-    if (!shift?.startedAt) return "-";
+    if (!shift?.startTime) return "-";
     return new Intl.DateTimeFormat("id-ID", {
       day: "numeric",
       month: "short",
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    }).format(new Date(shift.startedAt));
-  }, [shift?.startedAt]);
+    }).format(new Date(shift.startTime));
+  }, [shift?.startTime]);
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-destructive/5 via-background to-muted/40 p-4 md:p-6">
@@ -252,17 +252,7 @@ const EndShiftPage = () => {
   );
 }
 
-const SummaryCard = ({
-  icon,
-  label,
-  value,
-  strong,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  strong?: boolean;
-}) => {
+const SummaryCard = ({ icon, label, value, strong }: { icon: ReactNode; label: string; value: string; strong?: boolean }) => {
   return (
     <div className="rounded-2xl border bg-card p-4 shadow-sm">
       <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">

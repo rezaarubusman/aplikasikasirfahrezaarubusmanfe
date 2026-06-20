@@ -4,8 +4,8 @@ import { Button } from "~/components/ui/button";
 import { useAuth } from "~/stores/auth";
 import { useShift } from "~/stores/shift";
 import { useCart } from "~/stores/cart";
-import { api } from "~/api/auth";
 import { toast } from "sonner";
+import { axiosInstance } from "~/lib/axios";
 
 const navItems = [
   { to: "/cashierpos", label: "POS", icon: ScanBarcode },
@@ -22,12 +22,17 @@ export function CashierTopbar() {
   const clearCart = useCart((s) => s.clear);
 
   async function handleLogout() {
-    await api.logout();
-    clearCart();
-    setActiveShift(null);
-    logout();
-    toast.success("Berhasil keluar");
-    navigate("/");
+    try {
+      await axiosInstance.post("/auth/logout");
+    } catch (e) {
+      console.error("Logout error:", e);
+    } finally {
+      clearCart();
+      setActiveShift(null);
+      logout(); 
+      toast.success("Berhasil keluar");
+      navigate("/");
+    }
   }
 
   return (
@@ -79,7 +84,7 @@ export function CashierTopbar() {
         )}
         <div className="hidden flex-col items-end text-xs leading-tight sm:flex">
           <span className="font-medium text-sidebar-foreground">{user?.name}</span>
-          <span className="text-sidebar-foreground/60 capitalize">{user?.role}</span>
+          <span className="text-sidebar-foreground/60 capitalize">{user?.role?.toLowerCase()}</span>
         </div>
         <Button size="icon" variant="ghost" onClick={handleLogout} className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
           <LogOut className="h-4 w-4" />

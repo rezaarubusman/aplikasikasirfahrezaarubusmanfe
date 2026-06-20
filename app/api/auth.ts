@@ -1,6 +1,6 @@
 import { delay } from "./index";
 
-export type Role = "cashier" | "admin";
+export type Role = "CASHIER" | "ADMIN";
 export interface User {
   id: string;
   name: string;
@@ -9,9 +9,9 @@ export interface User {
 }
 
 const MOCK_USERS: Array<User & { password: string }> = [
-  { id: "u_admin", name: "Admin User", email: "admin@pos.dev", password: "password123", role: "admin" },
-  { id: "u_cash1", name: "Sari Cashier", email: "cashier@pos.dev", password: "password123", role: "cashier" },
-  { id: "u_cash2", name: "Budi Cashier", email: "budi@pos.dev", password: "password123", role: "cashier" },
+  { id: "u_admin", name: "Admin User", email: "admin@pos.dev", password: "password123", role: "ADMIN" },
+  { id: "u_cash1", name: "Sari Cashier", email: "cashier@pos.dev", password: "password123", role: "CASHIER" },
+  { id: "u_cash2", name: "Budi Cashier", email: "budi@pos.dev", password: "password123", role: "CASHIER" },
 ];
 
 export const api = {

@@ -11,14 +11,18 @@ import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
-import { shiftsApi } from "~/api/shifts";
+import { axiosInstance } from "~/lib/axios"; 
 import { useAuth } from "~/stores/auth";
-import { useShift } from "~/stores/shift";
-import { rupiah } from "~/api";
+import { useShift, type Shift } from "~/stores/shift";
+import { rupiah } from "~/api"; 
 
 const schema = z.object({
-  openingCash: z.coerce.number({ message: "Masukkan jumlah" }).min(0, "Harus 0 atau lebih"),
+  openingCash: z
+    .coerce
+    .number({ message: "Masukkan jumlah modal awal yang valid" })
+    .min(0, "Modal awal tidak boleh bernilai negatif"),
 });
+
 type Values = z.infer<typeof schema>;
 
 export function meta() {
@@ -42,13 +46,34 @@ const StartShiftPage = () => {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    shiftsApi.getActiveShift(user.id).then((s) => {
-      if (cancelled) return;
-      if (s) {
-        setActive(s);
-        navigate("/cashierpos");
+
+    const fetchActiveShift = async () => {
+      try {
+        const response = await axiosInstance.get("/shifts/active");
+        const s = response.data?.data || response.data;
+        
+        if (!cancelled && s) {
+          const mappedShift: Shift = {
+            id: s.id,
+            cashierId: s.cashierId,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            initialCash: Number(s.initialCash),
+            finalCash: s.finalCash ? Number(s.finalCash) : null,
+          };
+          
+          setActive(mappedShift);
+          navigate("/cashierpos");
+        }
+      } catch (err: any) {
+        if (err.response?.status !== 404 && !cancelled) {
+          toast.error("Gagal memeriksa status shift.");
+        }
       }
-    });
+    };
+
+    fetchActiveShift();
+
     return () => {
       cancelled = true;
     };
@@ -63,12 +88,22 @@ const StartShiftPage = () => {
     setSubmitting(true);
     
     try {
-      const shift = await shiftsApi.startShift({
-        cashierId: user.id,
-        openingCash: form.getValues("openingCash"),
+      const response = await axiosInstance.post("/shifts/open", {
+        initialCash: form.getValues("openingCash"),
       });
       
-      setActive(shift);
+      const s = response.data?.data || response.data;
+
+      const mappedShift: Shift = {
+        id: s.id,
+        cashierId: s.cashierId,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        initialCash: Number(s.initialCash),
+        finalCash: s.finalCash ? Number(s.finalCash) : null,
+      };
+      
+      setActive(mappedShift);
       toast.success("Shift dimulai");
       navigate("/cashierpos");
     } catch (e: any) {
@@ -237,15 +272,7 @@ const StartShiftPage = () => {
   );
 }
 
-const InfoCard = ({
-  icon,
-  title,
-  description,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-}) => {
+const InfoCard = ({ icon, title, description }: { icon: ReactNode; title: string; description: string }) => {
   return (
     <div className="rounded-2xl border bg-card p-4 shadow-sm">
       <div className="flex gap-3">

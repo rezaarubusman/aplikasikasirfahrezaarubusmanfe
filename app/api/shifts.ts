@@ -6,8 +6,8 @@ export interface Shift {
   cashierId: string;
   openingCash: number;
   closingCash?: number;
-  startedAt: string;
-  endedAt?: string;
+  startTime: string;
+  endTime?: string;
   status: "active" | "closed";
 }
 
@@ -41,7 +41,7 @@ export const shiftsApi = {
       id: uid("SHIFT"),
       cashierId: input.cashierId,
       openingCash: input.openingCash,
-      startedAt: new Date().toISOString(),
+      startTime: new Date().toISOString(),
       status: "active",
     };
     list.push(shift);
@@ -58,7 +58,7 @@ export const shiftsApi = {
     list[idx] = {
       ...list[idx],
       closingCash: input.closingCash,
-      endedAt: new Date().toISOString(),
+      endTime: new Date().toISOString(),
       status: "closed",
     };
     save(list);
@@ -72,7 +72,7 @@ export const shiftsApi = {
     if (!shift) throw new Error("Shift not found");
     // Sum cash transactions for this shift
     const txs = await txApi.getCashierTransactions({
-      date: shift.startedAt.slice(0, 10),
+      date: shift.startTime.slice(0, 10),
       cashierId: shift.cashierId,
     });
     const cashTx = txs.filter((t) => t.shiftId === shiftId && t.paymentType === "cash");

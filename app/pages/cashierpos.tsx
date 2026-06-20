@@ -15,15 +15,55 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/tabs";
-import { productsApi, type Product } from "~/api/products";
-import { txApi, type Transaction } from "~/api/transactions";
-import { rupiah } from "~/api";
+import { axiosInstance } from "~/lib/axios"
+import { rupiah } from "~/api"; 
 import { useCart } from "~/stores/cart";
 import { useAuth } from "~/stores/auth";
 import { useShift } from "~/stores/shift";
 import { cn } from "~/lib/utils";
 
 const PRODUCT_PAGE_SIZE = 8;
+
+export interface Shift {
+  id: string;
+  cashierId: string;
+  openingCash: number;
+  closingCash?: number;
+  startTime: string;
+  endTime?: string;
+  status: "active" | "closed";
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  stock: number;
+  image: string | null;
+  category: string;
+}
+
+export interface Transaction {
+  id: string;
+  total: number;
+  paymentType: "cash" | "debit";
+  cashReceived?: number;
+  change?: number;
+  cardLast4?: string;
+  items: {
+    productId: string;
+    name: string;
+    price: number;
+    qty: number;
+  }[];
+}
+
+type PendingPayment = {
+  paymentType: "cash" | "debit";
+  cashReceived?: number;
+  cardNumber?: string;
+};
 
 export function meta() {
   return [{ title: "POS — Aplikasi Kasir" }];
@@ -61,7 +101,27 @@ const PosPage = () => {
 
   const productsQ = useQuery({
     queryKey: ["products", q],
-    queryFn: () => productsApi.getProducts({ q }),
+    queryFn: async () => {
+      const response = await axiosInstance.get("/products");
+      const rawData = response.data?.data || response.data;
+      
+      let mappedProducts: Product[] = rawData.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        price: Number(p.price),
+        stock: p.stock,
+        image: p.image,
+        category: p.category?.name || "Lainnya",
+      }));
+
+      if (q) {
+        const search = q.toLowerCase();
+        mappedProducts = mappedProducts.filter(p => p.name.toLowerCase().includes(search));
+      }
+
+      return mappedProducts;
+    },
   });
 
   const products = productsQ.data ?? [];
@@ -79,11 +139,11 @@ const PosPage = () => {
     return filteredProducts.slice(start, start + PRODUCT_PAGE_SIZE);
   }, [filteredProducts, productPage]);
   const cartItemCount = items.reduce((sum, item) => sum + item.qty, 0);
-  const shiftStartedAt = shift?.startedAt
+  const shiftStartedAt = shift?.startTime
     ? new Intl.DateTimeFormat("id-ID", {
         hour: "2-digit",
         minute: "2-digit",
-      }).format(new Date(shift.startedAt))
+      }).format(new Date(shift.startTime)) 
     : "-";
 
   const applyQuery = useCallback((next: string) => {
@@ -127,6 +187,7 @@ const PosPage = () => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-primary/5 via-background to-muted/40 p-4 md:p-6">
       <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
@@ -298,19 +359,42 @@ const PosPage = () => {
         onConfirm={async () => {
           const pending = pendingPaymentRef.current;
           if (!user || !shift || !pending) return;
+          
           try {
-            const tx = await txApi.createTransaction({
-              items: items.map((item) => ({ productId: item.productId, name: item.name, price: item.price, qty: item.qty })),
-              shiftId: shift.id,
-              cashierId: user.id,
-              ...pending,
-            });
-            setReceipt(tx);
+            const body = {
+              items: items.map((item) => ({
+                productId: item.productId,
+                quantity: item.qty, 
+              })),
+              paymentMethod: pending.paymentType.toUpperCase(),
+              cashTendered: pending.paymentType === "cash" ? pending.cashReceived : undefined,
+              debitCardNumber: pending.paymentType === "debit" ? pending.cardNumber : undefined,
+            };
+
+            const response = await axiosInstance.post("/transactions", body);
+            const txData = response.data?.data || response.data; 
+
+            const receipt: Transaction = {
+              id: txData.invoiceNumber,
+              total: Number(txData.totalAmount),
+              paymentType: txData.paymentMethod === "CASH" ? "cash" : "debit",
+              cashReceived: txData.cashTendered ? Number(txData.cashTendered) : undefined,
+              change: txData.changeAmount ? Number(txData.changeAmount) : undefined,
+              cardLast4: txData.debitCardNumber ? txData.debitCardNumber.slice(-4) : undefined,
+              items: txData.transactionItems.map((ti: any) => ({
+                productId: ti.productId,
+                name: ti.product?.name || "Produk",
+                price: Number(ti.priceAtTransaction),
+                qty: ti.quantity,
+              })),
+            };
+
+            setReceipt(receipt);
             clearCart();
             setPayOpen(false);
             toast.success("Pembayaran berhasil");
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Pembayaran gagal");
+          } catch (e: any) {
+            toast.error(e.response?.data?.message || e.message || "Pembayaran gagal");
           } finally {
             setConfirmPayOpen(false);
             pendingPaymentRef.current = null;
@@ -320,12 +404,6 @@ const PosPage = () => {
       <ReceiptDialog tx={receipt} onClose={() => setReceipt(null)} />
     </div>
   );
-};
-
-type PendingPayment = {
-  paymentType: "cash" | "debit";
-  cashReceived?: number;
-  cardNumber?: string;
 };
 
 const HeaderStat = ({ icon, label, value, wide, }: { icon: ReactNode; label: string; value: string; wide?: boolean; }) => {
@@ -400,21 +478,27 @@ const PaginationControls = ({ page, totalPages, totalItems, pageSize, onPageChan
   );
 };
 
-const cashSchema = z.object({
-  cashReceived: z.coerce.number({ message: "Masukkan jumlah" }).min(0),
-});
-const debitSchema = z.object({
-  cardNumber: z.string().trim().regex(/^\d{16}$/, "Harus 16 digit"),
+const cashPaymentSchema = z.object({
+  cashReceived: z
+    .coerce
+    .number({ message: "Masukkan jumlah uang yang valid" })
+    .min(0, "Uang diterima tidak boleh bernilai negatif"),
 });
 
+const debitPaymentSchema = z.object({
+  cardNumber: z
+    .string()
+    .trim()
+    .regex(/^\d{16}$/, "Nomor kartu debit harus terdiri dari 16 digit angka"),
+});
 const PaymentDialog = ({ open, onOpenChange, total, paymentType, setPaymentType, onSubmit }: { open: boolean; onOpenChange: (open: boolean) => void; total: number; paymentType: "cash" | "debit"; setPaymentType: (paymentType: "cash" | "debit") => void; onSubmit: (payment: PendingPayment) => void; }) => {
   const cashForm = useForm<{ cashReceived: number }>({
-    resolver: zodResolver(cashSchema) as any,
+    resolver: zodResolver(cashPaymentSchema) as any,
     defaultValues: { cashReceived: total },
     mode: "onChange",
   });
   const debitForm = useForm<{ cardNumber: string }>({
-    resolver: zodResolver(debitSchema),
+    resolver: zodResolver(debitPaymentSchema),
     defaultValues: { cardNumber: "" },
     mode: "onChange",
   });

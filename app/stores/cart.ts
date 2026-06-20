@@ -1,5 +1,11 @@
 import { create } from "zustand";
-import type { Product } from "~/api/products";
+
+export interface CartProduct {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+}
 
 export interface CartLine {
   productId: string;
@@ -11,7 +17,8 @@ export interface CartLine {
 
 interface CartState {
   items: CartLine[];
-  add: (p: Product) => void;
+  // Ubah parameter (p: Product) menjadi (p: CartProduct)
+  add: (p: CartProduct) => void; 
   setQty: (productId: string, qty: number) => void;
   remove: (productId: string) => void;
   clear: () => void;

@@ -9,10 +9,88 @@ import { Card, CardContent } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle} from "~/components/ui/dialog";
-import { txApi, type PaymentType, type Transaction } from "~/api/transactions";
-import { rupiah } from "~/api";
+import { axiosInstance } from "~/lib/axios";
 import { useAuth } from "~/stores/auth";
 import { cn } from "~/lib/utils";
+
+type PaymentType = "cash" | "debit";
+
+interface TransactionItem {
+  productId: string;
+  name: string;
+  price: number;
+  qty: number;
+}
+
+interface Transaction {
+  id: string;
+  cashierId: string;
+  shiftId: string;
+  items: TransactionItem[];
+  total: number;
+  paymentType: PaymentType;
+  cashReceived?: number;
+  change?: number;
+  cardLast4?: string;
+  status: "completed";
+  createdAt: string;
+}
+
+interface CashierTransactionItem {
+  productId: string;
+  quantity: number;
+  priceAtTransaction: number | string;
+  product?: {
+    name?: string;
+  };
+}
+
+interface CashierTransaction {
+  id: string;
+  invoiceNumber?: string;
+  shiftId: string;
+  totalAmount: number | string;
+  paymentMethod: "CASH" | "DEBIT";
+  cashTendered?: number | string | null;
+  changeAmount?: number | string | null;
+  debitCardNumber?: string | null;
+  createdAt: string;
+  shift?: {
+    cashierId?: string;
+  };
+  transactionItems?: CashierTransactionItem[];
+}
+
+const rupiah = (number: number) => {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(number);
+};
+
+const mapTransaction = (transaction: CashierTransaction): Transaction => {
+  const paymentType: PaymentType = transaction.paymentMethod === "CASH" ? "cash" : "debit";
+
+  return {
+    id: transaction.invoiceNumber ?? transaction.id,
+    cashierId: transaction.shift?.cashierId ?? "",
+    shiftId: transaction.shiftId,
+    items: (transaction.transactionItems ?? []).map((item) => ({
+      productId: item.productId,
+      name: item.product?.name ?? "Produk",
+      price: Number(item.priceAtTransaction),
+      qty: item.quantity,
+    })),
+    total: Number(transaction.totalAmount),
+    paymentType,
+    cashReceived: paymentType === "cash" ? Number(transaction.cashTendered ?? 0) : undefined,
+    change: paymentType === "cash" ? Number(transaction.changeAmount ?? 0) : undefined,
+    cardLast4: paymentType === "debit" ? transaction.debitCardNumber?.slice(-4) : undefined,
+    status: "completed",
+    createdAt: transaction.createdAt,
+  };
+};
 
 export function meta() {
   return [{ title: "Transaksi Hari Ini — Aplikasi Kasir" }];
@@ -37,7 +115,16 @@ const HistoryPage = () => {
 
   const txQ = useQuery({
     queryKey: ["cashier-tx", user?.id, today, q],
-    queryFn: () => txApi.getCashierTransactions({ date: today, cashierId: user!.id, q }),
+    queryFn: async () => {
+      const response = await axiosInstance.get("/transactions");
+      const data = response.data?.data ?? response.data ?? [];
+      const keyword = q.trim().toLowerCase();
+
+      return (Array.isArray(data) ? data : [])
+        .map(mapTransaction)
+        .filter((transaction) => transaction.createdAt.slice(0, 10) === today)
+        .filter((transaction) => (keyword ? transaction.id.toLowerCase().includes(keyword) : true));
+    },
     enabled: !!user,
   });
 

@@ -13,18 +13,28 @@ import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from "~/components/ui/alert-dialog";
-import { shiftsApi } from "~/api/shifts";
-import { api } from "~/api/auth";
-import { rupiah } from "~/api";
+import { axiosInstance } from "~/lib/axios"; 
 import { useAuth } from "~/stores/auth";
 import { useShift } from "~/stores/shift";
 import { useCart } from "~/stores/cart";
 import { cn } from "~/lib/utils";
 
-const schema = z.object({
-  closingCash: z.coerce.number({ message: "Masukkan jumlah" }).min(0, "Harus 0 atau lebih"),
+const rupiah = (number: number) => {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(number);
+};
+
+const closeShiftSchema = z.object({
+  closingCash: z
+    .coerce
+    .number({ message: "Masukkan jumlah kas akhir yang valid" })
+    .min(0, "Kas penutupan tidak boleh bernilai negatif"),
 });
-type Values = z.infer<typeof schema>;
+
+type Values = z.infer<typeof closeShiftSchema>;
 
 export function meta() {
   return [{ title: "Selesai Shift — Aplikasi Kasir" }];
@@ -47,12 +57,33 @@ const EndShiftPage = () => {
 
   const summaryQ = useQuery({
     queryKey: ["shift-summary", shift?.id],
-    queryFn: () => shiftsApi.getShiftSummary(shift!.id),
+    queryFn: async () => {
+      if (!shift) return null;
+
+      const shiftRes = await axiosInstance.get(`/shifts/${shift.id}`);
+      const shiftData = shiftRes.data?.data || shiftRes.data;
+
+      const txRes = await axiosInstance.get(`/transactions?shiftId=${shift.id}`);
+      const transactions = txRes.data?.data || txRes.data || [];
+
+      const totalCashTransactions = transactions
+        .filter((t: any) => t.paymentMethod === "CASH")
+        .reduce((sum: number, t: any) => sum + Number(t.totalAmount), 0);
+
+      const openingCash = Number(shiftData.initialCash);
+      const expectedClosing = openingCash + totalCashTransactions;
+
+      return {
+        shift: { openingCash },
+        totalCashTransactions,
+        expectedClosing,
+      };
+    },
     enabled: !!shift,
   });
 
   const form = useForm<Values>({
-    resolver: zodResolver(schema) as any,
+    resolver: zodResolver(closeShiftSchema) as any,
     defaultValues: { closingCash: 0 },
     mode: "onChange",
   });
@@ -61,24 +92,31 @@ const EndShiftPage = () => {
     if (summaryQ.data) {
       form.reset({ closingCash: summaryQ.data.expectedClosing });
     }
-  }, [summaryQ.data]);
+  }, [summaryQ.data, form]);
 
   const handleConfirm = async () => {
     if (!shift) return;
     setSubmitting(true);
+    
     try {
-      await shiftsApi.endShift({
-        shiftId: shift.id,
-        closingCash: form.getValues("closingCash"),
+      await axiosInstance.patch(`/shifts/${shift.id}/close`, {
+        finalCash: form.getValues("closingCash"),
       });
-      await api.logout();
+
+      try {
+        await axiosInstance.post("/auth/logout");
+      } catch (logoutError) {
+      }
+
       setActive(null);
       clearCart();
-      logout();
+      logout(); 
+
       toast.success("Shift berakhir");
       navigate("/");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Gagal mengakhiri shift");
+    } catch (e: any) {
+      const errorMessage = e.response?.data?.message || e.message || "Gagal mengakhiri shift";
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
       setConfirmOpen(false);

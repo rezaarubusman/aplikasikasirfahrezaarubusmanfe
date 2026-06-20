@@ -99,8 +99,10 @@ const EndShiftPage = () => {
     setSubmitting(true);
     
     try {
+      const finalCash = Number(form.getValues("closingCash"));
+
       await axiosInstance.patch(`/shifts/${shift.id}/close`, {
-        finalCash: form.getValues("closingCash"),
+        finalCash,
       });
 
       try {
@@ -213,7 +215,7 @@ const EndShiftPage = () => {
                     min={0}
                     step={1000}
                     className="h-11 text-base font-mono"
-                    {...form.register("closingCash")}
+                    {...form.register("closingCash", { valueAsNumber: true })}
                   />
                   {form.formState.errors.closingCash && (
                     <p className="text-xs text-destructive">

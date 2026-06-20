@@ -4,32 +4,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import {
-  Banknote,
-  Calculator,
-  Clock,
-  Loader2,
-  PlayCircle,
-  ReceiptText,
-  ShieldCheck,
-  Store,
-  WalletCards,
-} from "lucide-react";
+import { Banknote, Calculator, Clock, Loader2, PlayCircle, ReceiptText, ShieldCheck, Store, WalletCards} from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "~/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
 import { shiftsApi } from "~/api/shifts";
 import { useAuth } from "~/stores/auth";
 import { useShift } from "~/stores/shift";
@@ -80,16 +61,19 @@ const StartShiftPage = () => {
   const handleConfirm = async () => {
     if (!user) return;
     setSubmitting(true);
+    
     try {
       const shift = await shiftsApi.startShift({
         cashierId: user.id,
         openingCash: form.getValues("openingCash"),
       });
+      
       setActive(shift);
       toast.success("Shift dimulai");
       navigate("/cashierpos");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Gagal memulai shift");
+    } catch (e: any) {
+      const errorMessage = e.response?.data?.message || e.message || "Gagal memulai shift";
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
       setConfirmOpen(false);

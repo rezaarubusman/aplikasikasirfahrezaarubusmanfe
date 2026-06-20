@@ -5,36 +5,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { toast } from "sonner";
-import {
-  AlertTriangle,
-  Banknote,
-  Calculator,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  LogOut,
-  ReceiptText,
-  ShieldCheck,
-  StopCircle,
-  WalletCards,
-} from "lucide-react";
+import { AlertTriangle, Banknote, Calculator, CheckCircle2, Clock, Loader2, LogOut, ReceiptText, ShieldCheck, StopCircle, WalletCards } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "~/components/ui/alert-dialog";
-
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from "~/components/ui/alert-dialog";
 import { shiftsApi } from "~/api/shifts";
 import { api } from "~/api/auth";
 import { rupiah } from "~/api";

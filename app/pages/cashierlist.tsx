@@ -6,61 +6,53 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus, Pencil, Trash2, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
-
-import { adminApi, type Cashier } from "~/api/admin";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Card } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "~/components/ui/alert-dialog";
-import { Switch } from "~/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
+import { axiosInstance } from "~/lib/axios"; 
 
-const schema = z.object({
-  name: z.string().trim().min(2, "Minimal 2 karakter").max(60),
-  email: z.string().trim().email("Masukkan email yang valid").max(120),
+export interface User {
+  id: string;
+  name: string;
+  username: string;
+  role: "ADMIN" | "CASHIER";
+  createdAt: string;
+}
+
+const createCashierSchema = z.object({
+  name: z.string().trim().min(2, "Nama minimal 2 karakter").max(60),
+  username: z.string().trim().min(3, "Username minimal 3 karakter").max(30),
+  password: z.string().min(8, "Password minimal 8 karakter"),
 });
-type FormValues = z.infer<typeof schema>;
+
+const updateCashierSchema = z.object({
+  name: z.string().trim().min(2, "Nama minimal 2 karakter").max(60),
+  username: z.string().optional(), // Hanya untuk display, tidak di-submit
+  password: z.string().min(8, "Password minimal 8 karakter").optional().or(z.literal("")),
+});
+
+type CreateFormValues = z.infer<typeof createCashierSchema>;
+type UpdateFormValues = z.infer<typeof updateCashierSchema>;
 
 export function meta() {
   return [{ title: "Daftar Kasir — Aplikasi Kasir" }];
 }
 
-function CashiersPage() {
+export default function CashiersPage() {
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q") || "";
   const [query, setQuery] = useState(q);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const [editing, setEditing] = useState<Cashier | null>(null);
+  const [editing, setEditing] = useState<User | null>(null);
   const [open, setOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Cashier | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
 
   const applyQuery = useCallback((next: string) => {
     if (next) {
@@ -70,12 +62,10 @@ function CashiersPage() {
     }
   }, [setSearchParams]);
 
-  // Sinkronisasi state lokal dengan URL
   useEffect(() => {
     setQuery(q);
   }, [q]);
 
-  // Implementasi Debounced Search (300ms)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (query !== q) {
@@ -85,7 +75,6 @@ function CashiersPage() {
     return () => clearTimeout(timer);
   }, [query, q, applyQuery]);
 
-  // Shortcut Ctrl+K
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
@@ -99,33 +88,68 @@ function CashiersPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "cashiers", q],
-    queryFn: () => adminApi.getCashiers({ q }),
+    queryFn: async () => {
+      const response = await axiosInstance.get('/users');
+      let users: User[] = response.data.data;
+      
+      users = users.filter((u) => u.role === "CASHIER");
+      
+      if (q) {
+        const lowerQ = q.toLowerCase();
+        users = users.filter((u) => 
+          u.name.toLowerCase().includes(lowerQ) || 
+          u.username.toLowerCase().includes(lowerQ)
+        );
+      }
+      return users;
+    },
   });
 
   const createMut = useMutation({
-    mutationFn: (v: FormValues) => adminApi.createCashier({ ...v, role: "cashier" }),
+    mutationFn: async (v: CreateFormValues) => {
+      const response = await axiosInstance.post('/users', { ...v, role: "CASHIER" });
+      return response.data;
+    },
     onSuccess: () => {
       toast.success("Kasir berhasil dibuat");
       qc.invalidateQueries({ queryKey: ["admin", "cashiers"] });
       setOpen(false);
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Gagal"),
+    onError: (e: any) => {
+      const errMsg = e.response?.data?.message || "Gagal membuat kasir";
+      toast.error(errMsg);
+    },
   });
+
   const updateMut = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<Cashier> }) =>
-      adminApi.updateCashier(id, patch),
+    mutationFn: async ({ id, patch }: { id: string; patch: Partial<CreateFormValues> }) => {
+      const response = await axiosInstance.patch(`/users/${id}`, patch);
+      return response.data;
+    },
     onSuccess: () => {
       toast.success("Kasir berhasil diperbarui");
       qc.invalidateQueries({ queryKey: ["admin", "cashiers"] });
       setOpen(false);
     },
+    onError: (e: any) => {
+      const errMsg = e.response?.data?.message || "Gagal memperbarui kasir";
+      toast.error(errMsg);
+    },
   });
+
   const deleteMut = useMutation({
-    mutationFn: (id: string) => adminApi.deleteCashier(id),
+    mutationFn: async (id: string) => {
+      const response = await axiosInstance.delete(`/users/${id}`);
+      return response.data;
+    },
     onSuccess: () => {
       toast.success("Kasir berhasil dihapus");
       qc.invalidateQueries({ queryKey: ["admin", "cashiers"] });
       setDeleteTarget(null);
+    },
+    onError: (e: any) => {
+      const errMsg = e.response?.data?.message || "Gagal menghapus kasir";
+      toast.error(errMsg);
     },
   });
 
@@ -133,7 +157,7 @@ function CashiersPage() {
     setEditing(null);
     setOpen(true);
   }
-  function openEdit(c: Cashier) {
+  function openEdit(c: User) {
     setEditing(c);
     setOpen(true);
   }
@@ -155,7 +179,7 @@ function CashiersPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             ref={searchInputRef}
-            placeholder="Cari berdasarkan nama atau email... (Ctrl+K)"
+            placeholder="Cari berdasarkan nama atau username... (Ctrl+K)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="pl-9"
@@ -173,7 +197,7 @@ function CashiersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Nama</TableHead>
-              <TableHead>Email</TableHead>
+              <TableHead>Username</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Bergabung</TableHead>
               <TableHead className="text-right">Aksi</TableHead>
@@ -196,14 +220,12 @@ function CashiersPage() {
               data.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.email}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.username}</TableCell>
                   <TableCell>
-                    <Badge variant={c.active ? "default" : "secondary"}>
-                      {c.active ? "Aktif" : "Nonaktif"}
-                    </Badge>
+                    <Badge variant="default">Aktif</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
-                    {new Date(c.createdAt).toLocaleDateString()}
+                    {new Date(c.createdAt).toLocaleDateString("id-ID")}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex gap-1">
@@ -241,7 +263,7 @@ function CashiersPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus kasir?</AlertDialogTitle>
             <AlertDialogDescription>
-              Ini akan menghapus <span className="font-medium">{deleteTarget?.name}</span>. Mereka tidak akan bisa masuk lagi.
+              Ini akan menghapus <span className="font-medium">{deleteTarget?.name}</span> secara sistem (Soft Delete). Mereka tidak akan bisa masuk lagi ke dalam aplikasi.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -259,7 +281,7 @@ function CashiersPage() {
   );
 }
 
-function CashierFormDialog({
+const CashierFormDialog = ({
   open,
   onOpenChange,
   editing,
@@ -269,22 +291,45 @@ function CashierFormDialog({
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  editing: Cashier | null;
-  onCreate: (v: FormValues) => void;
-  onUpdate: (id: string, patch: Partial<Cashier>) => void;
+  editing: User | null;
+  onCreate: (v: CreateFormValues) => void;
+  onUpdate: (id: string, patch: Partial<UpdateFormValues>) => void;
   submitting: boolean;
-}) {
-  const form = useForm<FormValues>({
+}) => {
+  const isEditing = !!editing;
+  const schema = isEditing ? updateCashierSchema : createCashierSchema;
+
+  const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
-    values: { name: editing?.name ?? "", email: editing?.email ?? "" },
+    values: {
+      name: editing?.name ?? "",
+      username: editing?.username ?? "",
+      password: "",
+    },
     mode: "onChange",
   });
-  const [active, setActive] = useState(editing?.active ?? true);
 
-  function onSubmit(values: FormValues) {
-    if (editing) onUpdate(editing.id, { ...values, active });
-    else onCreate(values);
+  const onSubmit = (values: any) => {
+    if (isEditing) {
+      const updateData = {
+        name: values.name,
+        ...(values.password ? { password: values.password } : {})
+      };
+      onUpdate(editing.id, updateData);
+    } else {
+      onCreate(values as CreateFormValues);
+    }
   }
+
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        name: editing?.name ?? "",
+        username: editing?.username ?? "",
+        password: "",
+      });
+    }
+  }, [open, editing, form]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -300,31 +345,40 @@ function CashierFormDialog({
             <Label htmlFor="name">Nama</Label>
             <Input id="name" {...form.register("name")} />
             {form.formState.errors.name && (
-              <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+              <p className="text-xs text-destructive">{form.formState.errors.name.message as string}</p>
             )}
           </div>
+          
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" {...form.register("email")} />
-            {form.formState.errors.email && (
-              <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
+            <Label htmlFor="username">Username</Label>
+            <Input 
+              id="username" 
+              {...form.register("username")} 
+              disabled={isEditing} 
+              className={isEditing ? "bg-muted cursor-not-allowed" : ""}
+            />
+            {form.formState.errors.username && (
+              <p className="text-xs text-destructive">{form.formState.errors.username.message as string}</p>
+            )}
+            {isEditing && (
+              <p className="text-xs text-muted-foreground">Username tidak dapat diubah setelah dibuat.</p>
             )}
           </div>
-          {editing && (
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div>
-                <Label htmlFor="active">Aktif</Label>
-                <p className="text-xs text-muted-foreground">Kasir nonaktif tidak dapat masuk.</p>
-              </div>
-              <Switch id="active" checked={active} onCheckedChange={setActive} />
-            </div>
-          )}
-          <DialogFooter>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="password">Password {isEditing && "(Kosongkan jika tidak diubah)"}</Label>
+            <Input id="password" type="password" {...form.register("password")} placeholder="••••••••" />
+            {form.formState.errors.password && (
+              <p className="text-xs text-destructive">{form.formState.errors.password.message as string}</p>
+            )}
+          </div>
+
+          <DialogFooter className="pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Batal
             </Button>
             <Button type="submit" disabled={submitting || !form.formState.isValid}>
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               {editing ? "Simpan" : "Buat"}
             </Button>
           </DialogFooter>
@@ -333,5 +387,3 @@ function CashierFormDialog({
     </Dialog>
   );
 }
-
-export default CashiersPage;

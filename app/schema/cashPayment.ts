@@ -1,6 +1,6 @@
 import z from "zod";
 
-const cashPaymentSchema = z.object({
+export const cashPaymentSchema = z.object({
   cashReceived: z
     .coerce
     .number({ message: "Masukkan jumlah uang yang valid" })

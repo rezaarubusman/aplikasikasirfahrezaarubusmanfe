@@ -1,6 +1,6 @@
 import z from "zod";
 
-const updateCashierSchema = z.object({
+export const updateCashierSchema = z.object({
   name: z.string().trim().min(2, "Nama minimal 2 karakter").max(60),
   password: z
     .string()

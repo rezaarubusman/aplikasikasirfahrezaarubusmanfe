@@ -1,6 +1,6 @@
 import z from "zod";
 
-const debitPaymentSchema = z.object({
+export const debitPaymentSchema = z.object({
   cardNumber: z
     .string()
     .trim()

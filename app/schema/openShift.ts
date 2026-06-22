@@ -1,6 +1,6 @@
 import z from "zod";
 
-const openShiftSchema = z.object({
+export const openShiftSchema = z.object({
   openingCash: z
     .coerce
     .number({ message: "Masukkan jumlah modal awal yang valid" })

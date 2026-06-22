@@ -4,21 +4,26 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { BarChart3, Boxes, Eye, EyeOff, Loader2, LockKeyhole, ReceiptText, ScanBarcode, ShieldCheck, Store, UserRound, Zap} from "lucide-react";
+import { ScanBarcode, Eye, EyeOff, Loader2, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { useAuth } from "~/stores/auth";
 import { axiosInstance } from "~/lib/axios";
 
-const schema = z.object({
-  username: z.string().trim().min(3, "Username minimal 3 karakter").max(50, "Username maksimal 50 karakter"),
-  password: z.string().min(6, "Password minimal 6 karakter"),
+const loginSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(3, "Username minimal 3 karakter")
+    .max(50, "Username maksimal 50 karakter"),
+  password: z
+    .string()
+    .min(8, "Password minimal 8 karakter"),
 });
 
-type FormValues = z.infer<typeof schema>;
+type Values = z.infer<typeof loginSchema>;
 
 export function meta() {
   return [{ title: "Masuk — Aplikasi Kasir" }];
@@ -32,8 +37,8 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const form = useForm<FormValues>({
-    resolver: zodResolver(schema),
+  const form = useForm<Values>({
+    resolver: zodResolver(loginSchema),
     defaultValues: { username: "", password: "" },
     mode: "onChange",
   });
@@ -43,7 +48,7 @@ const LoginPage = () => {
     navigate(user.role === "CASHIER" ? "/cashierstart" : "/adminhome", { replace: true });
   }, [user, navigate]);
 
-  const onSubmit = async (values: FormValues) => {
+  const onSubmit = async (values: Values) => {
     setSubmitting(true);
     setFormError(null);
     try {
@@ -74,11 +79,6 @@ const LoginPage = () => {
 
       <div className="relative mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1.05fr_0.95fr]">
         <section className="hidden space-y-6 lg:block">
-          <Badge variant="outline" className="gap-1 bg-background/70">
-            <Store className="h-3.5 w-3.5" />
-            POS control center
-          </Badge>
-
           <div className="space-y-4">
             <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
               <ScanBarcode className="h-7 w-7" />
@@ -92,12 +92,6 @@ const LoginPage = () => {
                 kontrol operasional untuk admin.
               </p>
             </div>
-          </div>
-
-          <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
-            <FeatureCard icon={<Zap className="h-5 w-5" />} title="POS cepat" text="Input penjualan lebih ringkas." />
-            <FeatureCard icon={<BarChart3 className="h-5 w-5" />} title="Laporan shift" text="Pantau kas awal hingga akhir." />
-            <FeatureCard icon={<Boxes className="h-5 w-5" />} title="Stok rapi" text="Produk dan persediaan terpantau." />
           </div>
         </section>
 
@@ -173,27 +167,11 @@ const LoginPage = () => {
                 Masuk ke Sistem
               </Button>
 
-              <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Sesi tersimpan aman di perangkat ini.
-              </p>
             </form>
           </CardContent>
         </Card>
       </div>
     </main>
-  );
-}
-
-const FeatureCard = ({ icon, title, text }: { icon: ReactNode; title: string; text: string }) => {
-  return (
-    <div className="rounded-2xl border bg-card/80 p-4 shadow-sm backdrop-blur">
-      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        {icon}
-      </div>
-      <p className="font-medium">{title}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{text}</p>
-    </div>
   );
 }
 

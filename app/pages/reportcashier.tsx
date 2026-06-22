@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
-import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, Info } from "lucide-react";
 import { axiosInstance } from "~/lib/axios"; 
 import { Card } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { DateRangeControls, defaultRange } from "~/components/admin/date-range";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 
 const rupiah = (number: number) => {
   return new Intl.NumberFormat("id-ID", {
@@ -32,6 +34,22 @@ interface ShiftReport {
   isMatch: boolean;
 }
 
+interface TransactionItem {
+  id: string;
+  quantity: number;
+  subtotal: number | string;
+  product: { name: string };
+}
+
+interface TransactionDetail {
+  id: string;
+  invoiceNumber: string;
+  totalAmount: number | string;
+  paymentMethod: string;
+  createdAt: string;
+  transactionItems: TransactionItem[];
+}
+
 export function meta() {
   return [{ title: "Laporan Shift & Kasir — Aplikasi Kasir" }];
 }
@@ -47,24 +65,20 @@ const CashierReport = () => {
     to: endDateParam || defaultRange().to,
   });
 
+  const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
+
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
-    if (range.from) {
-      params.set("startDate", range.from);
-    } else {
-      params.delete("startDate");
-    }
+    if (range.from) params.set("startDate", range.from);
+    else params.delete("startDate");
     
-    if (range.to) {
-      params.set("endDate", range.to);
-    } else {
-      params.delete("endDate");
-    }
+    if (range.to) params.set("endDate", range.to);
+    else params.delete("endDate");
     
     setSearchParams(params, { replace: true });
   }, [range.from, range.to, setSearchParams]);
 
-  const { data, isLoading } = useQuery({
+  const { data: shiftData, isLoading: isLoadingShifts } = useQuery({
     queryKey: ["admin", "report", "shifts", range.from, range.to],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -74,6 +88,15 @@ const CashierReport = () => {
       const response = await axiosInstance.get(`/reports/shift-discrepancies?${params.toString()}`);
       return response.data.data.report as ShiftReport[];
     },
+  });
+
+  const { data: transactionData, isLoading: isLoadingTransactions } = useQuery({
+    queryKey: ["admin", "transactions", selectedShiftId],
+    queryFn: async () => {
+      const response = await axiosInstance.get(`/transactions?shiftId=${selectedShiftId}`);
+      return response.data as TransactionDetail[]; 
+    },
+    enabled: !!selectedShiftId, 
   });
 
   return (
@@ -93,31 +116,32 @@ const CashierReport = () => {
             <TableRow>
               <TableHead>Waktu Shift</TableHead>
               <TableHead>Kasir</TableHead>
-              <TableHead className="text-center">Total Transaksi</TableHead>
+              <TableHead className="text-center">Total Tx</TableHead>
               <TableHead className="text-right">Debit</TableHead>
               <TableHead className="text-right">Penjualan Cash</TableHead>
               <TableHead className="text-right">Uang Awal</TableHead>
-              <TableHead className="text-right bg-muted/50">Uang Akhir (Sistem)</TableHead>
-              <TableHead className="text-right font-semibold">Uang Akhir (Aktual)</TableHead>
+              <TableHead className="text-right bg-muted/50">Akhir (Sistem)</TableHead>
+              <TableHead className="text-right font-semibold">Akhir (Aktual)</TableHead>
               <TableHead className="text-right">Selisih</TableHead>
               <TableHead className="text-center">Status</TableHead>
+              <TableHead className="text-center">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? (
+            {isLoadingShifts ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-10 text-muted-foreground">
+                <TableCell colSpan={11} className="text-center py-10 text-muted-foreground">
                   <Loader2 className="inline h-4 w-4 animate-spin mr-2" /> Memuat data dari database…
                 </TableCell>
               </TableRow>
-            ) : !data || data.length === 0 ? (
+            ) : !shiftData || shiftData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-10 text-muted-foreground">
+                <TableCell colSpan={11} className="text-center py-10 text-muted-foreground">
                   Belum ada data shift pada rentang tanggal ini.
                 </TableCell>
               </TableRow>
             ) : (
-              data.map((r) => (
+              shiftData.map((r) => (
                 <TableRow key={r.shiftId}>
                   <TableCell className="text-sm">
                     <div className="font-medium">
@@ -145,9 +169,19 @@ const CashierReport = () => {
                       </Badge>
                     ) : (
                       <Badge variant="destructive" className="bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20">
-                        <AlertCircle className="h-3 w-3 mr-1" /> Tidak Sesuai
+                        <AlertCircle className="h-3 w-3 mr-1" /> Selisih
                       </Badge>
                     )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setSelectedShiftId(r.shiftId)}
+                      title="Lihat Detail Transaksi"
+                    >
+                      <Info className="h-4 w-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))
@@ -155,6 +189,57 @@ const CashierReport = () => {
           </TableBody>
         </Table>
       </Card>
+
+      <Dialog open={!!selectedShiftId} onOpenChange={(open) => !open && setSelectedShiftId(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detail Transaksi Shift</DialogTitle>
+            <DialogDescription>
+              Rincian seluruh struk transaksi yang terjadi pada shift ini.
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingTransactions ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !transactionData || transactionData.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+              Tidak ada transaksi pada shift ini.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {transactionData.map((tx) => (
+                <Card key={tx.id} className="p-4 bg-muted/30">
+                  <div className="flex justify-between items-start mb-3 border-b pb-2">
+                    <div>
+                      <div className="font-semibold">{tx.invoiceNumber}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(tx.createdAt).toLocaleString("id-ID")}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <Badge variant={tx.paymentMethod === "CASH" ? "default" : "secondary"}>
+                        {tx.paymentMethod}
+                      </Badge>
+                      <div className="font-bold font-mono mt-1">{rupiah(Number(tx.totalAmount))}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-sm space-y-1">
+                    {tx.transactionItems.map((item) => (
+                      <div key={item.id} className="flex justify-between text-muted-foreground">
+                        <span>{item.quantity}x {item.product.name}</span>
+                        <span className="font-mono">{rupiah(Number(item.subtotal))}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

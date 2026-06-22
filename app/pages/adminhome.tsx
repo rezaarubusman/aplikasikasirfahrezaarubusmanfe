@@ -1,14 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { adminApi } from "~/api/admin";
-import { rupiah } from "~/api/index";
 import { DollarSign, Receipt, Users, TrendingUp, Loader2 } from "lucide-react";
+import { axiosInstance } from "~/lib/axios"; 
 
 export function meta() {
   return [{ title: "Dashboard — Aplikasi Kasir" }];
 }
 
-function Stat({ icon: Icon, label, value }: { icon: typeof DollarSign; label: string; value: string }) {
+export const rupiah = (number: number) => {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(number);
+};
+
+const Stat = ({ icon: Icon, label, value }: { icon: typeof DollarSign; label: string; value: string }) => {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -22,10 +30,13 @@ function Stat({ icon: Icon, label, value }: { icon: typeof DollarSign; label: st
   );
 }
 
-function Dashboard() {
+const Dashboard = () => {
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "stats"],
-    queryFn: () => adminApi.getDashboardStats(),
+    queryFn: async () => {
+      const response = await axiosInstance.get("/reports/dashboard");
+      return response.data.data;
+    },
   });
 
   return (
@@ -53,9 +64,27 @@ function Dashboard() {
           <CardTitle>Tautan cepat</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-1">
-          <p>· Kelola akun kasir di bagian <span className="font-medium text-foreground">Kasir</span>.</p>
-          <p>· Tambah atau edit item menu di bagian <span className="font-medium text-foreground">Produk</span>.</p>
-          <p>· Tinjau performa di bagian <span className="font-medium text-foreground">Laporan</span>.</p>
+          <p>· Kelola akun kasir di bagian{" "}
+            <Link 
+              to="/cashierlist"
+              className="font-medium text-foreground hover:underline transition-colors"
+            > Kasir
+            </Link>.
+          </p>
+          <p>· Tambah atau edit item menu di bagian{" "}
+            <Link 
+              to="/products"
+              className="font-medium text-foreground hover:underline transition-colors"
+            > Produk
+            </Link>.
+          </p>
+          <p>· Tinjau performa penjualan di bagian{" "}
+            <Link 
+              to="/reportsales"
+              className="font-medium text-foreground hover:underline transition-colors"
+            > Laporan Penjualan
+            </Link>.
+          </p>
         </CardContent>
       </Card>
     </div>

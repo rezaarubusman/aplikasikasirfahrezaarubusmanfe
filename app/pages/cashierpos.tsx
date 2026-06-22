@@ -1,7 +1,7 @@
 import { useNavigate, useSearchParams } from "react-router";
 import { useEffect, useMemo, useState, useRef, useCallback, type ReactNode } from "react";
 import { z } from "zod";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -75,6 +75,7 @@ const PosPage = () => {
   const q = searchParams.get("q") || "";
   const user = useAuth((s) => s.user);
   const shift = useShift((s) => s.active);
+  const qc = useQueryClient();
 
   useEffect(() => {
     if (!shift) navigate("/");
@@ -392,6 +393,7 @@ const PosPage = () => {
             setReceipt(receipt);
             clearCart();
             setPayOpen(false);
+            qc.invalidateQueries({ queryKey: ["products"] });
             toast.success("Pembayaran berhasil");
           } catch (e: any) {
             toast.error(e.response?.data?.message || e.message || "Pembayaran gagal");

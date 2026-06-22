@@ -1,87 +1,182 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { useSearchParams } from "react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Pencil, Trash2, Loader2, Search, ImageIcon } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Search, ImageIcon, Boxes } from "lucide-react";
 import { toast } from "sonner";
-
-import { productsApi, type Product } from "~/api/products";
+import { axiosInstance } from "~/lib/axios"; 
 import { rupiah } from "~/api/index";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Card } from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "~/components/ui/alert-dialog";
-import { Switch } from "~/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
 
-const schema = z.object({
-  name: z.string().trim().min(2).max(80),
-  category: z.string().trim().min(2).max(40),
-  price: z.coerce.number().int().min(0).max(100_000_000),
-  stock: z.coerce.number().int().min(0).max(1_000_000),
+export interface Category {
+  id: number;
+  name: string;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  description?: string | null;
+  price: number | string;
+  stock: number;
+  image?: string | null;
+  categoryId?: number;
+  category?: Category | null;
+  isDeleted: boolean;
+}
+
+type StockMovementType = "IN" | "OUT" | "ADJUSTMENT";
+
+const productSchema = z.object({
+  name: z.string().trim().min(2, "Nama produk minimal 2 karakter").max(80, "Nama produk maksimal 80 karakter"),
+  categoryId: z.coerce.number({ message: "Kategori wajib dipilih" }).int().min(1, "Kategori wajib dipilih"),
+  price: z.coerce.number().min(0, "Harga tidak boleh bernilai negatif").max(100000000, "Harga maksimal Rp 100.000.000"),
+  stock: z.coerce.number().int().min(0, "Stok tidak boleh bernilai negatif").max(1000000, "Stok maksimal 1.000.000"),
 });
-type FormValues = z.infer<typeof schema>;
+type ProductFormValues = z.infer<typeof productSchema>;
+
+const stockSchema = z.object({
+  type: z.enum(["IN", "OUT", "ADJUSTMENT"]),
+  qty: z.coerce.number().int().min(1, "Jumlah minimal adalah 1"),
+  notes: z.string().optional(),
+});
+type StockFormValues = z.infer<typeof stockSchema>;
+
+const productsApi = {
+  getAllProducts: async () => {
+    const res = await axiosInstance.get<Product[]>("/products");
+    return res.data;
+  },
+  getCategories: async () => {
+    const res = await axiosInstance.get<{ data: Category[] }>("/categories");
+    return res.data.data;
+  },
+  createProduct: async (data: FormData) => {
+    const res = await axiosInstance.post("/products", data, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+  updateProduct: async ({ id, data }: { id: string; data: FormData }) => {
+    const res = await axiosInstance.patch(`/products/${id}`, data, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+  deleteProduct: async (id: string) => {
+    const res = await axiosInstance.delete(`/products/${id}`);
+    return res.data;
+  },
+};
+
+const inventoryApi = {
+  createMovement: async (data: { productId: string; qty: number; type: StockMovementType; notes?: string }) => {
+    const res = await axiosInstance.post("/inventory", data);
+    return res.data;
+  },
+};
 
 export function meta() {
   return [{ title: "Daftar Produk — Aplikasi Kasir" }];
 }
 
-function ProductsPage() {
+const ProductsPage = () => {
   const qc = useQueryClient();
-  const [q, setQ] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const q = searchParams.get("q") || "";
+
+  const [query, setQuery] = useState(q);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const [editing, setEditing] = useState<Product | null>(null);
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  
+  const [stockTarget, setStockTarget] = useState<Product | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin", "products", q],
-    queryFn: () => productsApi.getAllProducts({ q }),
+    queryKey: ["admin", "products"],
+    queryFn: productsApi.getAllProducts,
   });
 
+  const filteredProducts = useMemo(() => {
+    if (!data) return [];
+    if (!q) return data;
+    const lowerQ = q.toLowerCase();
+    return data.filter(
+      (p) =>
+        p.name.toLowerCase().includes(lowerQ) ||
+        p.category?.name.toLowerCase().includes(lowerQ)
+    );
+  }, [data, q]);
+
+  const applyQuery = useCallback((next: string) => {
+    if (next) {
+      setSearchParams({ q: next }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    setQuery(q);
+  }, [q]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (query !== q) {
+        applyQuery(query);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, q, applyQuery]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const handleSearch = (value: string) => {
+    const newParams = new URLSearchParams(searchParams);
+    if (value) newParams.set("q", value);
+    else newParams.delete("q");
+    setSearchParams(newParams, { replace: true });
+  };
+
   const createMut = useMutation({
-    mutationFn: (input: Omit<Product, "id">) => productsApi.createProduct(input),
+    mutationFn: (input: FormData) => productsApi.createProduct(input),
     onSuccess: () => {
       toast.success("Produk berhasil dibuat");
       qc.invalidateQueries({ queryKey: ["admin", "products"] });
       setOpen(false);
     },
+    onError: (err: any) => toast.error(err.response?.data?.message || "Gagal membuat produk")
   });
+
   const updateMut = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<Product> }) =>
-      productsApi.updateProduct(id, patch),
+    mutationFn: ({ id, data }: { id: string; data: FormData }) => productsApi.updateProduct({ id, data }),
     onSuccess: () => {
       toast.success("Produk berhasil diperbarui");
       qc.invalidateQueries({ queryKey: ["admin", "products"] });
       setOpen(false);
     },
+    onError: (err: any) => toast.error(err.response?.data?.message || "Gagal memperbarui produk")
   });
+
   const deleteMut = useMutation({
     mutationFn: (id: string) => productsApi.deleteProduct(id),
     onSuccess: () => {
@@ -89,6 +184,17 @@ function ProductsPage() {
       qc.invalidateQueries({ queryKey: ["admin", "products"] });
       setDeleteTarget(null);
     },
+    onError: (err: any) => toast.error(err.response?.data?.message || "Gagal menghapus produk")
+  });
+
+  const stockMut = useMutation({
+    mutationFn: inventoryApi.createMovement,
+    onSuccess: () => {
+      toast.success("Pergerakan stok berhasil dicatat");
+      qc.invalidateQueries({ queryKey: ["admin", "products"] });
+      setStockTarget(null);
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || "Gagal memperbarui stok")
   });
 
   return (
@@ -104,16 +210,17 @@ function ProductsPage() {
             setOpen(true);
           }}
         >
-          <Plus className="h-4 w-4" /> Tambah produk
+          <Plus className="h-4 w-4 mr-2" /> Tambah produk
         </Button>
       </div>
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Cari berdasarkan nama atau kategori"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
+          ref={searchInputRef}
+          placeholder="Cari berdasarkan nama atau kategori... (Ctrl + K)"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
           className="pl-9"
         />
       </div>
@@ -127,54 +234,56 @@ function ProductsPage() {
               <TableHead>Kategori</TableHead>
               <TableHead className="text-right">Harga</TableHead>
               <TableHead className="text-right">Stok</TableHead>
-              <TableHead>Status</TableHead>
               <TableHead className="text-right">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
                   <Loader2 className="inline h-4 w-4 animate-spin mr-2" /> Memuat…
                 </TableCell>
               </TableRow>
-            ) : !data || data.length === 0 ? (
+            ) : filteredProducts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
                   Produk tidak ditemukan.
                 </TableCell>
               </TableRow>
             ) : (
-              data.map((p) => (
+              filteredProducts.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell>
                     <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center overflow-hidden">
-                      {p.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" />
+                      {p.image ? (
+                        <img src={p.image} alt={p.name} className="h-full w-full object-cover" />
                       ) : (
                         <ImageIcon className="h-4 w-4 text-muted-foreground" />
                       )}
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{p.category}</TableCell>
-                  <TableCell className="text-right font-mono">{rupiah(p.price)}</TableCell>
+                  <TableCell className="text-muted-foreground">{p.category?.name || "-"}</TableCell>
+                  <TableCell className="text-right font-mono">{rupiah(Number(p.price))}</TableCell>
                   <TableCell className="text-right font-mono">
                     <span className={p.stock === 0 ? "text-destructive font-bold" : ""}>
                       {p.stock}
                     </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={p.active ? "default" : "secondary"}>
-                      {p.active ? "Aktif" : "Tersembunyi"}
-                    </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex gap-1">
                       <Button
                         size="icon"
                         variant="ghost"
+                        title="Kelola Stok"
+                        onClick={() => setStockTarget(p)}
+                      >
+                        <Boxes className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title="Edit Produk"
                         onClick={() => {
                           setEditing(p);
                           setOpen(true);
@@ -185,6 +294,7 @@ function ProductsPage() {
                       <Button
                         size="icon"
                         variant="ghost"
+                        title="Hapus Produk"
                         onClick={() => setDeleteTarget(p)}
                         className="text-destructive hover:text-destructive"
                       >
@@ -204,8 +314,20 @@ function ProductsPage() {
         onOpenChange={setOpen}
         editing={editing}
         onCreate={(v) => createMut.mutate(v)}
-        onUpdate={(id, patch) => updateMut.mutate({ id, patch })}
+        onUpdate={(id, data) => updateMut.mutate({ id, data })}
         submitting={createMut.isPending || updateMut.isPending}
+      />
+
+      <StockMovementDialog
+        open={!!stockTarget}
+        onOpenChange={(o) => !o && setStockTarget(null)}
+        product={stockTarget}
+        onSubmit={(data) => {
+          if (stockTarget) {
+            stockMut.mutate({ productId: stockTarget.id, ...data });
+          }
+        }}
+        submitting={stockMut.isPending}
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
@@ -229,9 +351,9 @@ function ProductsPage() {
       </AlertDialog>
     </div>
   );
-}
+};
 
-function ProductFormDialog({
+const ProductFormDialog = ({
   open,
   onOpenChange,
   editing,
@@ -242,23 +364,36 @@ function ProductFormDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   editing: Product | null;
-  onCreate: (v: Omit<Product, "id">) => void;
-  onUpdate: (id: string, patch: Partial<Product>) => void;
+  onCreate: (v: FormData) => void;
+  onUpdate: (id: string, data: FormData) => void;
   submitting: boolean;
-}) {
-  const form = useForm<FormValues>({
-    resolver: zodResolver(schema) as any,
-    values: {
-      name: editing?.name ?? "",
-      category: editing?.category ?? "",
-      price: editing?.price ?? 0,
-      stock: editing?.stock ?? 0,
-    },
+}) => {
+  const form = useForm<ProductFormValues>({
+    resolver: zodResolver(productSchema) as any,
+    defaultValues: { name: "", categoryId: 0, price: 0, stock: 0 },
     mode: "onChange",
   });
-  const [active, setActive] = useState(editing?.active ?? true);
-  const [imageUrl, setImageUrl] = useState<string | undefined>(editing?.imageUrl);
+
+  const { data: categories } = useQuery({
+    queryKey: ["admin", "categories"],
+    queryFn: productsApi.getCategories,
+  });
+
+  const [imageUrl, setImageUrl] = useState<string | null | undefined>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setImageUrl(editing?.image);
+      form.reset({
+        name: editing?.name ?? "",
+        categoryId: editing?.categoryId ?? 0,
+        price: editing ? Number(editing.price) : 0,
+        stock: editing?.stock ?? 0,
+      });
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }, [open, editing, form]);
 
   function handleFile(file?: File) {
     if (!file) return;
@@ -270,10 +405,28 @@ function ProductFormDialog({
     setImageUrl(url);
   }
 
-  function onSubmit(values: FormValues) {
-    const payload = { ...values, active, imageUrl };
-    if (editing) onUpdate(editing.id, payload);
-    else onCreate(payload);
+  function onSubmit(values: ProductFormValues) {
+    const formData = new FormData();
+    formData.append("name", values.name);
+    formData.append("categoryId", values.categoryId.toString());
+    formData.append("price", values.price.toString());
+    
+    if (!editing) {
+      formData.append("stock", values.stock.toString());
+    }
+
+    const file = fileRef.current?.files?.[0];
+    if (file) {
+      formData.append("image", file);
+    } else if (imageUrl === null) {
+      formData.append("image", ""); 
+    }
+
+    if (editing) {
+      onUpdate(editing.id, formData);
+    } else {
+      onCreate(formData);
+    }
   }
 
   return (
@@ -282,53 +435,69 @@ function ProductFormDialog({
         <DialogHeader>
           <DialogTitle>{editing ? "Edit produk" : "Tambah produk"}</DialogTitle>
           <DialogDescription>
-            {editing ? "Perbarui detail item di bawah ini." : "Buat item menu baru."}
+            {editing ? "Perbarui detail item. Stok dikelola melalui menu terpisah." : "Buat item menu baru dan tentukan stok awal."}
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <div className="flex items-start gap-4">
-            <div className="h-20 w-20 rounded-md bg-muted flex items-center justify-center overflow-hidden">
+            <div className="h-20 w-20 rounded-md bg-muted flex items-center justify-center overflow-hidden shrink-0 border">
               {imageUrl ? (
-                <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+                <img src={imageUrl} alt="Preview" className="h-full w-full object-cover" />
               ) : (
                 <ImageIcon className="h-6 w-6 text-muted-foreground" />
               )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 w-full">
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg, image/png"
                 className="hidden"
                 onChange={(e) => handleFile(e.target.files?.[0])}
               />
-              <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-                {imageUrl ? "Ganti gambar" : "Unggah gambar"}
-              </Button>
-              {imageUrl && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setImageUrl(undefined)}>
-                  Hapus
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+                  {imageUrl ? "Ganti gambar" : "Unggah gambar"}
                 </Button>
-              )}
-              <p className="text-xs text-muted-foreground">PNG / JPG, maks 2MB</p>
+                {imageUrl && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => {
+                    setImageUrl(null);
+                    if (fileRef.current) fileRef.current.value = "";
+                  }}>
+                    Hapus
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Hanya format PNG / JPG, maksimum ukuran file 2MB.</p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5 col-span-2">
-              <Label htmlFor="p-name">Nama</Label>
+              <Label htmlFor="p-name">Nama Produk</Label>
               <Input id="p-name" {...form.register("name")} />
               {form.formState.errors.name && (
                 <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
               )}
             </div>
+            
             <div className="space-y-1.5 col-span-2">
               <Label htmlFor="p-category">Kategori</Label>
-              <Input id="p-category" {...form.register("category")} />
-              {form.formState.errors.category && (
-                <p className="text-xs text-destructive">{form.formState.errors.category.message}</p>
+              <select
+                id="p-category"
+                {...form.register("categoryId")}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
+              >
+                <option value={0} disabled>Pilih Kategori</option>
+                {categories?.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              {form.formState.errors.categoryId && (
+                <p className="text-xs text-destructive">{form.formState.errors.categoryId.message}</p>
               )}
             </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="p-price">Harga (Rp)</Label>
               <Input id="p-price" type="number" inputMode="numeric" {...form.register("price")} />
@@ -336,36 +505,135 @@ function ProductFormDialog({
                 <p className="text-xs text-destructive">{form.formState.errors.price.message}</p>
               )}
             </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="p-stock">Stok</Label>
-              <Input id="p-stock" type="number" inputMode="numeric" {...form.register("stock")} />
+              <Label htmlFor="p-stock">Stok Awal</Label>
+              <Input 
+                id="p-stock" 
+                type="number" 
+                inputMode="numeric" 
+                {...form.register("stock")} 
+                disabled={!!editing} 
+              />
               {form.formState.errors.stock && (
                 <p className="text-xs text-destructive">{form.formState.errors.stock.message}</p>
               )}
             </div>
           </div>
 
-          <div className="flex items-center justify-between rounded-md border p-3">
-            <div>
-              <Label htmlFor="p-active">Aktif</Label>
-              <p className="text-xs text-muted-foreground">Produk tersembunyi tidak muncul di POS.</p>
-            </div>
-            <Switch id="p-active" checked={active} onCheckedChange={setActive} />
-          </div>
-
-          <DialogFooter>
+          <DialogFooter className="pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Batal
             </Button>
-            <Button type="submit" disabled={submitting || !form.formState.isValid}>
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {editing ? "Simpan" : "Buat"}
+            <Button type="submit" disabled={submitting}>
+              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              {editing ? "Simpan Perubahan" : "Buat Produk"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
-}
+};
+
+const StockMovementDialog = ({
+  open,
+  onOpenChange,
+  product,
+  onSubmit,
+  submitting,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  product: Product | null;
+  onSubmit: (data: StockFormValues) => void;
+  submitting: boolean;
+}) => {
+  const form = useForm<StockFormValues>({
+    resolver: zodResolver(stockSchema) as any,
+    defaultValues: { type: "IN", qty: 1, notes: "" },
+    mode: "onChange",
+  });
+
+  useEffect(() => {
+    if (open) {
+      form.reset({ type: "IN", qty: 1, notes: "" });
+    }
+  }, [open, form]);
+
+  const currentStock = product?.stock || 0;
+  const movementType = form.watch("type");
+  const qty = form.watch("qty");
+  
+  // Estimasi stok baru setelah pergerakan untuk ditampilkan di UI
+  const estimatedStock = movementType === "IN" ? currentStock + (Number(qty) || 0) : 
+                         movementType === "OUT" ? currentStock - (Number(qty) || 0) : 
+                         currentStock + (Number(qty) || 0);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Kelola Stok Produk</DialogTitle>
+          <DialogDescription>
+            Catat pergerakan stok untuk <span className="font-semibold text-foreground">{product?.name}</span>.
+            Stok saat ini: <span className="font-mono font-bold text-foreground">{currentStock}</span>
+          </DialogDescription>
+        </DialogHeader>
+        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="s-type">Jenis Pergerakan</Label>
+              <select
+                id="s-type"
+                {...form.register("type")}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="IN">Stok Masuk (IN)</option>
+                <option value="OUT">Stok Keluar (OUT)</option>
+                <option value="ADJUSTMENT">Penyesuaian (ADJUSTMENT)</option>
+              </select>
+              {form.formState.errors.type && (
+                <p className="text-xs text-destructive">{form.formState.errors.type.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="s-qty">Jumlah</Label>
+              <Input id="s-qty" type="number" inputMode="numeric" {...form.register("qty")} />
+              {form.formState.errors.qty && (
+                <p className="text-xs text-destructive">{form.formState.errors.qty.message}</p>
+              )}
+            </div>
+            
+            <div className="space-y-1.5 col-span-2">
+              <Label htmlFor="s-notes">Catatan (Opsional)</Label>
+              <Input id="s-notes" placeholder="Contoh: Barang retur, stok opname" {...form.register("notes")} />
+            </div>
+          </div>
+          
+          <div className="rounded-md bg-muted p-3">
+            <p className="text-sm text-muted-foreground">
+              Estimasi stok setelah disimpan: <span className={`font-mono font-bold ${estimatedStock < 0 ? "text-destructive" : "text-foreground"}`}>{estimatedStock}</span>
+            </p>
+            {estimatedStock < 0 && (
+              <p className="text-xs text-destructive mt-1">Peringatan: Stok tidak boleh menjadi negatif.</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Batal
+            </Button>
+            <Button type="submit" disabled={submitting || estimatedStock < 0}>
+              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Catat Pergerakan
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 export default ProductsPage;

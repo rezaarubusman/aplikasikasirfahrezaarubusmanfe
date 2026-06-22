@@ -1,6 +1,6 @@
 import z from "zod";
 
-const closeShiftSchema = z.object({
+export const closeShiftSchema = z.object({
   closingCash: z
     .coerce
     .number({ message: "Masukkan jumlah kas akhir yang valid" })

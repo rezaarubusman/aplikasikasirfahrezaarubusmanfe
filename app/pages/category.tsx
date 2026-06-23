@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState, useEffect, useMemo, useCallback } from "react";
-import { useSearchParams } from "react-router"; 
+import { useSearchParams } from "react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Pencil, Trash2, Loader2, Search, Tags } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Search, Tags, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { axiosInstance } from "~/lib/axios"; 
 import { Button } from "~/components/ui/button";
@@ -25,11 +25,10 @@ const categorySchema = z.object({
 });
 type CategoryFormValues = z.infer<typeof categorySchema>;
 
-
 const categoriesApi = {
   getAll: async () => {
     const res = await axiosInstance.get<{ data: Category[] }>("/categories");
-    return res.data.data;
+    return res.data.data || res.data;
   },
   create: async (data: CategoryFormValues) => {
     const res = await axiosInstance.post("/categories", data);
@@ -49,10 +48,14 @@ export function meta() {
   return [{ title: "Daftar Kategori — Aplikasi Kasir" }];
 }
 
+const PAGE_SIZE = 10;
+
 const CategoriesPage = () => {
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q") || "";
+  const pageParam = searchParams.get("page");
+  const currentPage = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
 
   const [query, setQuery] = useState(q);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -73,18 +76,42 @@ const CategoriesPage = () => {
     return data.filter((c) => c.name.toLowerCase().includes(lowerQ));
   }, [data, q]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredCategories.length / PAGE_SIZE));
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        params.set("page", totalPages.toString());
+        return params;
+      }, { replace: true });
+    }
+  }, [currentPage, totalPages, setSearchParams]);
+
+  const paginatedCategories = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredCategories.slice(start, start + PAGE_SIZE);
+  }, [filteredCategories, currentPage]);
+
+  const handlePageChange = (newPage: number) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.set("page", newPage.toString());
+      return params;
+    });
+  };
+
   const applyQuery = useCallback((next: string) => {
     setSearchParams((prevParams) => {
       const newParams = new URLSearchParams(prevParams);
       if (next) newParams.set("q", next);
       else newParams.delete("q");
+      newParams.set("page", "1"); 
       return newParams;
     }, { replace: true });
   }, [setSearchParams]);
 
-  useEffect(() => {
-    setQuery(q);
-  }, [q]);
+  useEffect(() => { setQuery(q); }, [q]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -100,8 +127,8 @@ const CategoriesPage = () => {
         searchInputRef.current?.focus();
       }
     };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const createMut = useMutation({
@@ -179,14 +206,14 @@ const CategoriesPage = () => {
                   <Loader2 className="inline h-4 w-4 animate-spin mr-2" /> Memuat…
                 </TableCell>
               </TableRow>
-            ) : filteredCategories.length === 0 ? (
+            ) : paginatedCategories.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center py-10 text-muted-foreground">
                   Kategori tidak ditemukan.
                 </TableCell>
               </TableRow>
             ) : (
-              filteredCategories.map((c) => (
+              paginatedCategories.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell>
                     <div className="h-10 w-10 rounded-md bg-primary/10 text-primary flex items-center justify-center overflow-hidden">
@@ -223,6 +250,35 @@ const CategoriesPage = () => {
             )}
           </TableBody>
         </Table>
+
+        {!isLoading && filteredCategories.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Menampilkan <span className="font-medium text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> hingga <span className="font-medium text-foreground">{Math.min(currentPage * PAGE_SIZE, filteredCategories.length)}</span> dari <span className="font-medium text-foreground">{filteredCategories.length}</span> kategori
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage <= 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+              </Button>
+              <div className="text-sm font-medium px-2">
+                Hal {currentPage} / {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <CategoryFormDialog
@@ -240,7 +296,7 @@ const CategoriesPage = () => {
             <AlertDialogTitle>Hapus kategori?</AlertDialogTitle>
             <AlertDialogDescription>
               Ini akan menghapus secara permanen kategori <span className="font-medium">{deleteTarget?.name}</span>. 
-              Produk yang menggunakan kategori ini mungkin tidak akan memiliki kategori (tergantung konfigurasi database).
+              Produk yang menggunakan kategori ini mungkin tidak akan memiliki kategori.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

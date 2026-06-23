@@ -16,7 +16,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/tabs";
 import { axiosInstance } from "~/lib/axios"
-import { rupiah } from "~/api"; 
 import { useCart } from "~/stores/cart";
 import { useAuth } from "~/stores/auth";
 import { useShift } from "~/stores/shift";
@@ -68,6 +67,14 @@ type PendingPayment = {
 export function meta() {
   return [{ title: "POS — Aplikasi Kasir" }];
 }
+
+export const rupiah = (number: number) => {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(number);
+};
 
 const PosPage = () => {
   const navigate = useNavigate();
@@ -126,20 +133,26 @@ const PosPage = () => {
   });
 
   const products = productsQ.data ?? [];
+
   const categories = useMemo(() => {
     return ["Semua", ...Array.from(new Set(products.map((product) => product.category))).sort()];
   }, [products]);
+
   const filteredProducts = useMemo(() => {
     return category === "Semua"
       ? products
       : products.filter((product) => product.category === category);
   }, [category, products]);
+
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCT_PAGE_SIZE));
+
   const paginatedProducts = useMemo(() => {
     const start = (productPage - 1) * PRODUCT_PAGE_SIZE;
     return filteredProducts.slice(start, start + PRODUCT_PAGE_SIZE);
   }, [filteredProducts, productPage]);
+
   const cartItemCount = items.reduce((sum, item) => sum + item.qty, 0);
+
   const shiftStartedAt = shift?.startTime
     ? new Intl.DateTimeFormat("id-ID", {
         hour: "2-digit",
@@ -427,7 +440,15 @@ const ProductCard = ({ product, onAdd }: { product: Product; onAdd: () => void }
       disabled={out}
       className={cn( "group relative flex h-full flex-col overflow-hidden rounded-2xl border bg-card text-left shadow-sm transition-all", out ? "cursor-not-allowed opacity-50" : "hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md active:scale-[0.98]")}>
       <div className="relative flex aspect-square items-center justify-center bg-gradient-to-br from-primary/10 via-muted/70 to-muted">
-        <span className="text-4xl font-semibold text-primary/30">{product.name.slice(0, 1)}</span>
+        {product.image ?(
+          <img
+            src={product.image}
+            alt={product.name}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <span className="text-4xl font-semibold text-primary/30">{product.name.slice(0, 1)}</span>
+          )}
         <Badge variant="secondary" className="absolute left-3 top-3 bg-background/85">
           {product.category}
         </Badge>

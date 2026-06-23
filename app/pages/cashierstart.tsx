@@ -14,7 +14,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { axiosInstance } from "~/lib/axios"; 
 import { useAuth } from "~/stores/auth";
 import { useShift, type Shift } from "~/stores/shift";
-import { rupiah } from "~/api"; 
 
 const schema = z.object({
   openingCash: z
@@ -28,6 +27,14 @@ type Values = z.infer<typeof schema>;
 export function meta() {
   return [{ title: "Mulai Shift — Aplikasi Kasir" }];
 }
+
+export const rupiah = (number: number) => {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(number);
+};
 
 const StartShiftPage = () => {
   const navigate = useNavigate();

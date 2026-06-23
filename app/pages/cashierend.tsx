@@ -19,7 +19,7 @@ import { useShift } from "~/stores/shift";
 import { useCart } from "~/stores/cart";
 import { cn } from "~/lib/utils";
 
-const rupiah = (number: number) => {
+export const rupiah = (number: number) => {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",

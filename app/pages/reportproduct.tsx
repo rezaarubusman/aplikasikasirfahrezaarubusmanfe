@@ -7,12 +7,11 @@ import { Card } from "~/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { DateRangeControls, defaultRange } from "~/components/admin/date-range";
 
-const rupiah = (number: number) => {
+export const rupiah = (number: number) => {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
   }).format(number);
 };
 

@@ -7,7 +7,6 @@ import { z } from "zod";
 import { Plus, Pencil, Trash2, Loader2, Search, ImageIcon, Boxes } from "lucide-react";
 import { toast } from "sonner";
 import { axiosInstance } from "~/lib/axios"; 
-import { rupiah } from "~/api/index";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -87,6 +86,14 @@ const inventoryApi = {
 export function meta() {
   return [{ title: "Daftar Produk — Aplikasi Kasir" }];
 }
+
+export const rupiah = (number: number) => {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(number);
+};
 
 const ProductsPage = () => {
   const qc = useQueryClient();

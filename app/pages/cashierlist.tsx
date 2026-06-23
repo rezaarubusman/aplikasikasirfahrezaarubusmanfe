@@ -43,7 +43,7 @@ export function meta() {
   return [{ title: "Daftar Kasir — Aplikasi Kasir" }];
 }
 
-export default function CashiersPage() {
+const CashiersPage = () => {
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q") || "";

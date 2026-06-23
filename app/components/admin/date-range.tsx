@@ -1,7 +1,7 @@
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 
-export function DateRangeControls({
+export const DateRangeControls = ({
   from,
   to,
   onChange,
@@ -9,7 +9,7 @@ export function DateRangeControls({
   from: string;
   to: string;
   onChange: (next: { from: string; to: string }) => void;
-}) {
+}) => {
   return (
     <div className="flex flex-wrap items-end gap-3">
       <div className="space-y-1.5">

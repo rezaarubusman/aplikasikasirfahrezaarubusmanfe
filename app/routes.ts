@@ -16,6 +16,7 @@ export default [
     layout("components/cashier/admin.tsx", [
         route("adminhome", "pages/adminhome.tsx"),
         route("products", "pages/products.tsx"),
+        route("category", "pages/category.tsx"),
         route("cashierlist", "pages/cashierlist.tsx"),
         route("reportsales", "pages/reportsales.tsx"),
         route("reportproduct", "pages/reportproduct.tsx"),

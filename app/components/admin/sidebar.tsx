@@ -1,17 +1,8 @@
 import { Link, useNavigate, useLocation } from "react-router";
-import {
-  LayoutDashboard,
-  Users,
-  Package,
-  BarChart3,
-  TrendingUp,
-  ShoppingBag,
-  LogOut,
-  ScanBarcode,
-} from "lucide-react";
+import { LayoutDashboard, Users, Package, BarChart3, TrendingUp, ShoppingBag, LogOut, ScanBarcode, Tag } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { useAuth } from "~/stores/auth";
-import { api } from "~/api/auth";
+import { axiosInstance } from "~/lib/axios";
 import { toast } from "sonner";
 
 const navGroups = [
@@ -24,6 +15,7 @@ const navGroups = [
     items: [
       { to: "/cashierlist", label: "Kasir", icon: Users },
       { to: "/products", label: "Produk", icon: Package },
+      { to: "/category", label: "Kategori", icon: Tag},
     ],
   },
   {
@@ -36,17 +28,22 @@ const navGroups = [
   },
 ] as const;
 
-export function AdminSidebar() {
+export const AdminSidebar = () => {
   const navigate = useNavigate();
   const user = useAuth((s) => s.user);
   const logout = useAuth((s) => s.logout);
   const { pathname } = useLocation();
 
   async function handleLogout() {
-    await api.logout();
-    logout();
-    toast.success("Berhasil keluar");
-    navigate("/");
+    try {
+      await axiosInstance.post("/auth/logout");
+    } catch (error) {
+      console.error("Gagal melakukan logout di server", error);
+    } finally {
+      logout();
+      toast.success("Berhasil keluar");
+      navigate("/");
+    }
   }
 
   return (
@@ -90,7 +87,7 @@ export function AdminSidebar() {
       <div className="border-t border-sidebar-border p-3 flex items-center gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{user?.name}</p>
-          <p className="text-xs text-sidebar-foreground/60 truncate">{user?.email}</p>
+          <p className="text-xs text-sidebar-foreground/60 truncate">{user?.name}</p> {/* Mengganti user.email menjadi username karena di database kamu menggunakan username */}
         </div>
         <Button
           size="icon"

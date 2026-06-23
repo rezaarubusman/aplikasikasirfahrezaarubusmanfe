@@ -9,6 +9,7 @@ import { Button } from "~/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { DateRangeControls, defaultRange } from "~/components/admin/date-range";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "~/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 
 export const rupiah = (number: number) => {
   return new Intl.NumberFormat("id-ID", {
@@ -58,42 +59,57 @@ const CashierReport = () => {
   
   const startDateParam = searchParams.get("startDate");
   const endDateParam = searchParams.get("endDate");
+  const cashierIdParam = searchParams.get("cashierId");
   
   const [range, setRange] = useState<{ from: string; to: string }>({
     from: startDateParam || defaultRange().from,
     to: endDateParam || defaultRange().to,
   });
 
+  const [selectedCashier, setSelectedCashier] = useState<string>(cashierIdParam || "all");
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
+    
     if (range.from) params.set("startDate", range.from);
     else params.delete("startDate");
     
     if (range.to) params.set("endDate", range.to);
     else params.delete("endDate");
+
+    if (selectedCashier && selectedCashier !== "all") params.set("cashierId", selectedCashier);
+    else params.delete("cashierId");
     
     setSearchParams(params, { replace: true });
-  }, [range.from, range.to, setSearchParams]);
+  }, [range.from, range.to, selectedCashier, setSearchParams]);
+
+  const { data: cashiersList, isLoading: isLoadingCashiers } = useQuery({
+    queryKey: ["admin", "users-cashiers"],
+    queryFn: async () => {
+      const response = await axiosInstance.get("/users");
+      return response.data.data.filter((u: any) => u.role === "CASHIER");
+    },
+  });
 
   const { data: shiftData, isLoading: isLoadingShifts } = useQuery({
-    queryKey: ["admin", "report", "shifts", range.from, range.to],
+    queryKey: ["admin", "report", "shifts", range.from, range.to, selectedCashier],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (range.from) params.append("startDate", range.from);
       if (range.to) params.append("endDate", range.to);
+      if (selectedCashier !== "all") params.append("cashierId", selectedCashier);
       
       const response = await axiosInstance.get(`/reports/shift-discrepancies?${params.toString()}`);
       return response.data.data.report as ShiftReport[];
     },
   });
 
-  const { data: transactionData, isLoading: isLoadingTransactions } = useQuery({
+  const { data: transactionData, isLoading: isLoadingTransactions } = useQuery<TransactionDetail[]>({
     queryKey: ["admin", "transactions", selectedShiftId],
     queryFn: async () => {
       const response = await axiosInstance.get(`/transactions?shiftId=${selectedShiftId}`);
-      return response.data as TransactionDetail[]; 
+      return (response.data.data || response.data) as TransactionDetail[]; 
     },
     enabled: !!selectedShiftId, 
   });
@@ -107,7 +123,28 @@ const CashierReport = () => {
         </p>
       </div>
 
-      <DateRangeControls from={range.from} to={range.to} onChange={setRange} />
+      <div className="flex flex-col sm:flex-row gap-4 items-end bg-card p-4 rounded-xl border shadow-sm">
+        <DateRangeControls from={range.from} to={range.to} onChange={setRange} />
+        
+        <div className="space-y-1.5 min-w-[200px]">
+          <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+            Filter Kasir
+          </label>
+          <Select value={selectedCashier} onValueChange={setSelectedCashier} disabled={isLoadingCashiers}>
+            <SelectTrigger>
+              <SelectValue placeholder="Pilih Kasir" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Kasir</SelectItem>
+              {cashiersList?.map((cashier: any) => (
+                <SelectItem key={cashier.id} value={cashier.id}>
+                  {cashier.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
       <Card className="overflow-x-auto">
         <Table className="min-w-max">
@@ -136,7 +173,7 @@ const CashierReport = () => {
             ) : !shiftData || shiftData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={11} className="text-center py-10 text-muted-foreground">
-                  Belum ada data shift pada rentang tanggal ini.
+                  Belum ada data shift pada filter saat ini.
                 </TableCell>
               </TableRow>
             ) : (
@@ -208,7 +245,7 @@ const CashierReport = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {transactionData.map((tx) => (
+              {transactionData.map((tx: TransactionDetail) => (
                 <Card key={tx.id} className="p-4 bg-muted/30">
                   <div className="flex justify-between items-start mb-3 border-b pb-2">
                     <div>
@@ -226,7 +263,7 @@ const CashierReport = () => {
                   </div>
                   
                   <div className="text-sm space-y-1">
-                    {tx.transactionItems.map((item) => (
+                    {tx.transactionItems.map((item: TransactionItem) => (
                       <div key={item.id} className="flex justify-between text-muted-foreground">
                         <span>{item.quantity}x {item.product.name}</span>
                         <span className="font-mono">{rupiah(Number(item.subtotal))}</span>

@@ -32,7 +32,7 @@ const createCashierSchema = z.object({
 
 const updateCashierSchema = z.object({
   name: z.string().trim().min(2, "Nama minimal 2 karakter").max(60),
-  username: z.string().optional(), // Hanya untuk display, tidak di-submit
+  username: z.string().optional(),
   password: z.string().min(8, "Password minimal 8 karakter").optional().or(z.literal("")),
 });
 
@@ -387,3 +387,5 @@ const CashierFormDialog = ({
     </Dialog>
   );
 }
+
+export default CashiersPage;

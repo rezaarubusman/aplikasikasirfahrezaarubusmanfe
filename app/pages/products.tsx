@@ -4,9 +4,10 @@ import { useSearchParams } from "react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Pencil, Trash2, Loader2, Search, ImageIcon, Boxes } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Search, ImageIcon, Boxes, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { axiosInstance } from "~/lib/axios"; 
+import { rupiah } from "~/api/index";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -43,16 +44,21 @@ const productSchema = z.object({
 type ProductFormValues = z.infer<typeof productSchema>;
 
 const stockSchema = z.object({
-  type: z.enum(["IN", "OUT", "ADJUSTMENT"]),
-  qty: z.coerce.number().int().min(1, "Jumlah minimal adalah 1"),
+  type: z.enum(["IN", "OUT", "ADJUSTMENT"], {
+    message: "Jenis pergerakan wajib dipilih",
+  }),
+  qty: z.coerce
+    .number({ message: "Jumlah wajib diisi" })
+    .int({ message: "Jumlah harus berupa bilangan bulat" })
+    .min(1, { message: "Jumlah minimal adalah 1" }),
   notes: z.string().optional(),
 });
 type StockFormValues = z.infer<typeof stockSchema>;
 
 const productsApi = {
   getAllProducts: async () => {
-    const res = await axiosInstance.get<Product[]>("/products");
-    return res.data;
+    const res = await axiosInstance.get<{ data: Product[] }>("/products");
+    return res.data.data || res.data;
   },
   getCategories: async () => {
     const res = await axiosInstance.get<{ data: Category[] }>("/categories");
@@ -87,18 +93,14 @@ export function meta() {
   return [{ title: "Daftar Produk — Aplikasi Kasir" }];
 }
 
-export const rupiah = (number: number) => {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(number);
-};
+const PAGE_SIZE = 10;
 
 const ProductsPage = () => {
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q") || "";
+  const pageParam = searchParams.get("page");
+  const currentPage = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
 
   const [query, setQuery] = useState(q);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -106,7 +108,6 @@ const ProductsPage = () => {
   const [editing, setEditing] = useState<Product | null>(null);
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
-  
   const [stockTarget, setStockTarget] = useState<Product | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -125,23 +126,46 @@ const ProductsPage = () => {
     );
   }, [data, q]);
 
-  const applyQuery = useCallback((next: string) => {
-    if (next) {
-      setSearchParams({ q: next }, { replace: true });
-    } else {
-      setSearchParams({}, { replace: true });
-    }
-  }, [setSearchParams]);
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
 
   useEffect(() => {
-    setQuery(q);
-  }, [q]);
+    if (currentPage > totalPages && totalPages > 0) {
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        params.set("page", totalPages.toString());
+        return params;
+      }, { replace: true });
+    }
+  }, [currentPage, totalPages, setSearchParams]);
+
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredProducts.slice(start, start + PAGE_SIZE);
+  }, [filteredProducts, currentPage]);
+
+  const handlePageChange = (newPage: number) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.set("page", newPage.toString());
+      return params;
+    });
+  };
+
+  const applyQuery = useCallback((next: string) => {
+    setSearchParams((prevParams) => {
+      const newParams = new URLSearchParams(prevParams);
+      if (next) newParams.set("q", next);
+      else newParams.delete("q");
+      newParams.set("page", "1"); 
+      return newParams;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  useEffect(() => { setQuery(q); }, [q]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (query !== q) {
-        applyQuery(query);
-      }
+      if (query !== q) applyQuery(query);
     }, 300);
     return () => clearTimeout(timer);
   }, [query, q, applyQuery]);
@@ -153,16 +177,9 @@ const ProductsPage = () => {
         searchInputRef.current?.focus();
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  const handleSearch = (value: string) => {
-    const newParams = new URLSearchParams(searchParams);
-    if (value) newParams.set("q", value);
-    else newParams.delete("q");
-    setSearchParams(newParams, { replace: true });
-  };
 
   const createMut = useMutation({
     mutationFn: (input: FormData) => productsApi.createProduct(input),
@@ -225,10 +242,10 @@ const ProductsPage = () => {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           ref={searchInputRef}
-          placeholder="Cari berdasarkan nama atau kategori... (Ctrl + K)"
+          placeholder="Cari berdasarkan nama atau kategori... (Ctrl+K)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="pl-9"
+          className="pl-9 pr-14"
         />
       </div>
 
@@ -251,14 +268,14 @@ const ProductsPage = () => {
                   <Loader2 className="inline h-4 w-4 animate-spin mr-2" /> Memuat…
                 </TableCell>
               </TableRow>
-            ) : filteredProducts.length === 0 ? (
+            ) : paginatedProducts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
                   Produk tidak ditemukan.
                 </TableCell>
               </TableRow>
             ) : (
-              filteredProducts.map((p) => (
+              paginatedProducts.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell>
                     <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center overflow-hidden">
@@ -314,6 +331,35 @@ const ProductsPage = () => {
             )}
           </TableBody>
         </Table>
+        
+        {!isLoading && filteredProducts.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Menampilkan <span className="font-medium text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> hingga <span className="font-medium text-foreground">{Math.min(currentPage * PAGE_SIZE, filteredProducts.length)}</span> dari <span className="font-medium text-foreground">{filteredProducts.length}</span> produk
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage <= 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+              </Button>
+              <div className="text-sm font-medium px-2">
+                Hal {currentPage} / {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <ProductFormDialog
@@ -520,7 +566,7 @@ const ProductFormDialog = ({
                 type="number" 
                 inputMode="numeric" 
                 {...form.register("stock")} 
-                disabled={!!editing} 
+                disabled={!!editing}
               />
               {form.formState.errors.stock && (
                 <p className="text-xs text-destructive">{form.formState.errors.stock.message}</p>
@@ -572,7 +618,6 @@ const StockMovementDialog = ({
   const movementType = form.watch("type");
   const qty = form.watch("qty");
   
-  // Estimasi stok baru setelah pergerakan untuk ditampilkan di UI
   const estimatedStock = movementType === "IN" ? currentStock + (Number(qty) || 0) : 
                          movementType === "OUT" ? currentStock - (Number(qty) || 0) : 
                          currentStock + (Number(qty) || 0);

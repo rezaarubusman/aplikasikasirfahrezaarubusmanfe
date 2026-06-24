@@ -55,40 +55,6 @@ const stockSchema = z.object({
 });
 type StockFormValues = z.infer<typeof stockSchema>;
 
-const productsApi = {
-  getAllProducts: async () => {
-    const res = await axiosInstance.get<{ data: Product[] }>("/products");
-    return res.data.data || res.data;
-  },
-  getCategories: async () => {
-    const res = await axiosInstance.get<{ data: Category[] }>("/categories");
-    return res.data.data;
-  },
-  createProduct: async (data: FormData) => {
-    const res = await axiosInstance.post("/products", data, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-    return res.data;
-  },
-  updateProduct: async ({ id, data }: { id: string; data: FormData }) => {
-    const res = await axiosInstance.patch(`/products/${id}`, data, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-    return res.data;
-  },
-  deleteProduct: async (id: string) => {
-    const res = await axiosInstance.delete(`/products/${id}`);
-    return res.data;
-  },
-};
-
-const inventoryApi = {
-  createMovement: async (data: { productId: string; qty: number; type: StockMovementType; notes?: string }) => {
-    const res = await axiosInstance.post("/inventory", data);
-    return res.data;
-  },
-};
-
 export function meta() {
   return [{ title: "Daftar Produk — Aplikasi Kasir" }];
 }
@@ -110,21 +76,24 @@ const ProductsPage = () => {
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [stockTarget, setStockTarget] = useState<Product | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data: productsData, isLoading } = useQuery({
     queryKey: ["admin", "products"],
-    queryFn: productsApi.getAllProducts,
+    queryFn: async () => {
+      const res = await axiosInstance.get<{ data: Product[] }>("/products");
+      return res.data.data || res.data;
+    },
   });
 
   const filteredProducts = useMemo(() => {
-    if (!data) return [];
-    if (!q) return data;
+    if (!productsData) return [];
+    if (!q) return productsData;
     const lowerQ = q.toLowerCase();
-    return data.filter(
+    return productsData.filter(
       (p) =>
         p.name.toLowerCase().includes(lowerQ) ||
         p.category?.name.toLowerCase().includes(lowerQ)
     );
-  }, [data, q]);
+  }, [productsData, q]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
 
@@ -182,7 +151,12 @@ const ProductsPage = () => {
   }, []);
 
   const createMut = useMutation({
-    mutationFn: (input: FormData) => productsApi.createProduct(input),
+    mutationFn: async (input: FormData) => {
+      const res = await axiosInstance.post("/products", input, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return res.data;
+    },
     onSuccess: () => {
       toast.success("Produk berhasil dibuat");
       qc.invalidateQueries({ queryKey: ["admin", "products"] });
@@ -192,7 +166,12 @@ const ProductsPage = () => {
   });
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: FormData }) => productsApi.updateProduct({ id, data }),
+    mutationFn: async ({ id, data }: { id: string; data: FormData }) => {
+      const res = await axiosInstance.patch(`/products/${id}`, data, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return res.data;
+    },
     onSuccess: () => {
       toast.success("Produk berhasil diperbarui");
       qc.invalidateQueries({ queryKey: ["admin", "products"] });
@@ -202,7 +181,10 @@ const ProductsPage = () => {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: string) => productsApi.deleteProduct(id),
+    mutationFn: async (id: string) => {
+      const res = await axiosInstance.delete(`/products/${id}`);
+      return res.data;
+    },
     onSuccess: () => {
       toast.success("Produk berhasil dihapus");
       qc.invalidateQueries({ queryKey: ["admin", "products"] });
@@ -212,7 +194,10 @@ const ProductsPage = () => {
   });
 
   const stockMut = useMutation({
-    mutationFn: inventoryApi.createMovement,
+    mutationFn: async (data: { productId: string; qty: number; type: StockMovementType; notes?: string }) => {
+      const res = await axiosInstance.post("/inventory", data);
+      return res.data;
+    },
     onSuccess: () => {
       toast.success("Pergerakan stok berhasil dicatat");
       qc.invalidateQueries({ queryKey: ["admin", "products"] });
@@ -428,9 +413,12 @@ const ProductFormDialog = ({
   });
 
   const { data: categories } = useQuery({
-    queryKey: ["admin", "categories"],
-    queryFn: productsApi.getCategories,
-  });
+      queryKey: ["admin", "categories"],
+      queryFn: async () => {
+        const res = await axiosInstance.get<{ data: Category[] }>("/categories");
+        return res.data.data;
+      },
+    });
 
   const [imageUrl, setImageUrl] = useState<string | null | undefined>(null);
   const fileRef = useRef<HTMLInputElement>(null);

@@ -25,25 +25,6 @@ const categorySchema = z.object({
 });
 type CategoryFormValues = z.infer<typeof categorySchema>;
 
-const categoriesApi = {
-  getAll: async () => {
-    const res = await axiosInstance.get<{ data: Category[] }>("/categories");
-    return res.data.data || res.data;
-  },
-  create: async (data: CategoryFormValues) => {
-    const res = await axiosInstance.post("/categories", data);
-    return res.data;
-  },
-  update: async ({ id, data }: { id: number; data: CategoryFormValues }) => {
-    const res = await axiosInstance.patch(`/categories/${id}`, data);
-    return res.data;
-  },
-  delete: async (id: number) => {
-    const res = await axiosInstance.delete(`/categories/${id}`);
-    return res.data;
-  },
-};
-
 export function meta() {
   return [{ title: "Daftar Kategori — Aplikasi Kasir" }];
 }
@@ -64,17 +45,20 @@ const CategoriesPage = () => {
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data:categoriesData, isLoading } = useQuery({
     queryKey: ["admin", "categories"],
-    queryFn: categoriesApi.getAll,
+    queryFn: async () => {
+      const res = await axiosInstance.get<{ data: Category[] }>("/categories");
+      return res.data.data || res.data;
+    },
   });
 
   const filteredCategories = useMemo(() => {
-    if (!data) return [];
-    if (!q) return data;
+    if (!categoriesData) return [];
+    if (!q) return categoriesData;
     const lowerQ = q.toLowerCase();
-    return data.filter((c) => c.name.toLowerCase().includes(lowerQ));
-  }, [data, q]);
+    return categoriesData.filter((c) => c.name.toLowerCase().includes(lowerQ));
+  }, [categoriesData, q]);
 
   const totalPages = Math.max(1, Math.ceil(filteredCategories.length / PAGE_SIZE));
 
@@ -132,7 +116,10 @@ const CategoriesPage = () => {
   }, []);
 
   const createMut = useMutation({
-    mutationFn: categoriesApi.create,
+    mutationFn: async (data: CategoryFormValues) => {
+      const res = await axiosInstance.post("/categories", data);
+      return res.data;
+    },
     onSuccess: () => {
       toast.success("Kategori berhasil dibuat");
       qc.invalidateQueries({ queryKey: ["admin", "categories"] });
@@ -142,7 +129,10 @@ const CategoriesPage = () => {
   });
 
   const updateMut = useMutation({
-    mutationFn: categoriesApi.update,
+    mutationFn: async ({ id, data }: { id: number; data: CategoryFormValues }) => {
+      const res = await axiosInstance.patch(`/categories/${id}`, data);
+      return res.data;
+    },
     onSuccess: () => {
       toast.success("Kategori berhasil diperbarui");
       qc.invalidateQueries({ queryKey: ["admin", "categories"] });
@@ -152,7 +142,10 @@ const CategoriesPage = () => {
   });
 
   const deleteMut = useMutation({
-    mutationFn: categoriesApi.delete,
+    mutationFn: async (id: number) => {
+      const res = await axiosInstance.delete(`/categories/${id}`);
+      return res.data;
+    },
     onSuccess: () => {
       toast.success("Kategori berhasil dihapus");
       qc.invalidateQueries({ queryKey: ["admin", "categories"] });

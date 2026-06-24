@@ -19,7 +19,7 @@ const schema = z.object({
   openingCash: z
     .coerce
     .number({ message: "Masukkan jumlah modal awal yang valid" })
-    .min(0, "Modal awal tidak boleh bernilai negatif"),
+    .min(1000, "Modal awal tidak boleh bernilai negatif"),
 });
 
 type Values = z.infer<typeof schema>;
@@ -190,7 +190,7 @@ const StartShiftPage = () => {
                     id="openingCash"
                     type="number"
                     inputMode="numeric"
-                    min={0}
+                    min={1000}
                     step={1000}
                     className="h-11 text-base font-mono"
                     {...form.register("openingCash")}

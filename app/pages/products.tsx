@@ -44,7 +44,7 @@ const productSchema = z.object({
 type ProductFormValues = z.infer<typeof productSchema>;
 
 const stockSchema = z.object({
-  type: z.enum(["IN", "OUT", "ADJUSTMENT"], {
+  type: z.enum(["IN", "ADJUSTMENT"], {
     message: "Jenis pergerakan wajib dipilih",
   }),
   qty: z.coerce
@@ -596,18 +596,19 @@ const StockMovementDialog = ({
     mode: "onChange",
   });
 
-  useEffect(() => {
-    if (open) {
-      form.reset({ type: "IN", qty: 1, notes: "" });
-    }
-  }, [open, form]);
-
   const currentStock = product?.stock || 0;
+
+  useEffect(() => {
+    if (open && product) {
+      form.reset({ 
+        type: product.stock === 0 ? "IN" : "ADJUSTMENT", qty: 1, notes: "" });
+    }
+  }, [open, product, form]);
+
   const movementType = form.watch("type");
   const qty = form.watch("qty");
   
   const estimatedStock = movementType === "IN" ? currentStock + (Number(qty) || 0) : 
-                         movementType === "OUT" ? currentStock - (Number(qty) || 0) : 
                          currentStock + (Number(qty) || 0);
 
   return (
@@ -629,9 +630,12 @@ const StockMovementDialog = ({
                 {...form.register("type")}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <option value="IN">Stok Masuk (IN)</option>
-                <option value="OUT">Stok Keluar (OUT)</option>
-                <option value="ADJUSTMENT">Penyesuaian (ADJUSTMENT)</option>
+                {currentStock === 0 && (
+                  <option value="IN">Stok Masuk (IN)</option>
+                )}
+                {currentStock > 0 && (
+                  <option value="ADJUSTMENT">Penyesuaian (ADJUSTMENT)</option>
+                )}
               </select>
               {form.formState.errors.type && (
                 <p className="text-xs text-destructive">{form.formState.errors.type.message}</p>

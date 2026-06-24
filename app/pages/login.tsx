@@ -85,11 +85,10 @@ const LoginPage = () => {
             </div>
             <div>
               <h1 className="max-w-xl text-4xl font-bold tracking-tight">
-                Kelola transaksi, shift, dan laporan dalam satu alur kasir.
+                Kelola aplikasi kasir dalam satu alur.
               </h1>
               <p className="mt-4 max-w-lg text-muted-foreground">
-                Masuk sesuai peran untuk membuka dashboard yang tepat: POS cepat untuk kasir,
-                kontrol operasional untuk admin.
+                Masuk sesuai peran yang sesuai.
               </p>
             </div>
           </div>

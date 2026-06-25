@@ -1,9 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Plus, Pencil, Trash2, Loader2, Search, Tags, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { axiosInstance } from "~/lib/axios"; 
@@ -14,16 +13,12 @@ import { Card } from "~/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
+import { categorySchema, type CategoryFormValues } from "~/schema/category"; 
 
 export interface Category {
   id: number;
   name: string;
 }
-
-const categorySchema = z.object({
-  name: z.string().trim().min(2, "Nama kategori minimal 2 karakter").max(40, "Nama kategori maksimal 40 karakter"),
-});
-type CategoryFormValues = z.infer<typeof categorySchema>;
 
 export function meta() {
   return [{ title: "Daftar Kategori — Aplikasi Kasir" }];
@@ -45,22 +40,22 @@ const CategoriesPage = () => {
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
 
-  const { data:categoriesData, isLoading } = useQuery({
-    queryKey: ["admin", "categories"],
+  const { data: fetchResult, isLoading } = useQuery({
+    queryKey: ["admin", "categories", q, currentPage],
     queryFn: async () => {
-      const res = await axiosInstance.get<{ data: Category[] }>("/categories");
-      return res.data.data || res.data;
+      const params = new URLSearchParams();
+      params.set("page", currentPage.toString());
+      params.set("limit", PAGE_SIZE.toString());
+      if (q) params.set("search", q);
+
+      const res = await axiosInstance.get(`/categories?${params.toString()}`);
+      return res.data;
     },
   });
 
-  const filteredCategories = useMemo(() => {
-    if (!categoriesData) return [];
-    if (!q) return categoriesData;
-    const lowerQ = q.toLowerCase();
-    return categoriesData.filter((c) => c.name.toLowerCase().includes(lowerQ));
-  }, [categoriesData, q]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredCategories.length / PAGE_SIZE));
+  const categoriesData: Category[] = fetchResult?.data || [];
+  const totalPages = fetchResult?.meta?.totalPages || 1;
+  const totalItems = fetchResult?.meta?.total || 0;
 
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
@@ -71,11 +66,6 @@ const CategoriesPage = () => {
       }, { replace: true });
     }
   }, [currentPage, totalPages, setSearchParams]);
-
-  const paginatedCategories = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredCategories.slice(start, start + PAGE_SIZE);
-  }, [filteredCategories, currentPage]);
 
   const handlePageChange = (newPage: number) => {
     setSearchParams((prev) => {
@@ -199,14 +189,14 @@ const CategoriesPage = () => {
                   <Loader2 className="inline h-4 w-4 animate-spin mr-2" /> Memuat…
                 </TableCell>
               </TableRow>
-            ) : paginatedCategories.length === 0 ? (
+            ) : categoriesData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center py-10 text-muted-foreground">
                   Kategori tidak ditemukan.
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedCategories.map((c) => (
+              categoriesData.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell>
                     <div className="h-10 w-10 rounded-md bg-primary/10 text-primary flex items-center justify-center overflow-hidden">
@@ -244,10 +234,10 @@ const CategoriesPage = () => {
           </TableBody>
         </Table>
 
-        {!isLoading && filteredCategories.length > 0 && (
+        {!isLoading && totalItems > 0 && (
           <div className="flex items-center justify-between px-4 py-4 border-t">
             <div className="text-sm text-muted-foreground">
-              Menampilkan <span className="font-medium text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> hingga <span className="font-medium text-foreground">{Math.min(currentPage * PAGE_SIZE, filteredCategories.length)}</span> dari <span className="font-medium text-foreground">{filteredCategories.length}</span> kategori
+              Menampilkan <span className="font-medium text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> hingga <span className="font-medium text-foreground">{Math.min(currentPage * PAGE_SIZE, totalItems)}</span> dari <span className="font-medium text-foreground">{totalItems}</span> kategori
             </div>
             <div className="flex items-center gap-2">
               <Button

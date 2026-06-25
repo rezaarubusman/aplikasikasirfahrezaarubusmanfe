@@ -1,4 +1,4 @@
-import z from "zod";
+import { z } from "zod";
 
 export const productSchema = z.object({
   name: z
@@ -23,3 +23,5 @@ export const productSchema = z.object({
     .min(0, "Stok tidak boleh bernilai negatif")
     .max(1000000, "Stok maksimal 1.000.000"),
 });
+
+export type ProductFormValues = z.infer<typeof productSchema>;

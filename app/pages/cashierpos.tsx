@@ -78,8 +78,6 @@ export const rupiah = (number: number) => {
 
 const PosPage = () => {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const q = searchParams.get("q") || "";
   const user = useAuth((s) => s.user);
   const shift = useShift((s) => s.active);
   const qc = useQueryClient();
@@ -95,9 +93,13 @@ const PosPage = () => {
   const clearCart = useCart((s) => s.clear);
   const cartTotal = useCart((s) => s.total());
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const q = searchParams.get("q") || "";
+  const category = searchParams.get("category") || "Semua";
+  const pageParam = searchParams.get("page");
+  const currentPage = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
+
   const [query, setQuery] = useState(q);
-  const [category, setCategory] = useState("Semua");
-  const [productPage, setProductPage] = useState(1);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pendingPaymentRef = useRef<PendingPayment | null>(null);
 
@@ -107,49 +109,45 @@ const PosPage = () => {
   const [receipt, setReceipt] = useState<Transaction | null>(null);
   const [removeId, setRemoveId] = useState<string | null>(null);
 
-  const productsQ = useQuery({
-    queryKey: ["products", q],
+  const { data: categoriesData = [] } = useQuery({
+    queryKey: ["categories"],
     queryFn: async () => {
-      const response = await axiosInstance.get("/products");
-      const rawData = response.data?.data || response.data;
-      
-      let mappedProducts: Product[] = rawData.map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        price: Number(p.price),
-        stock: p.stock,
-        image: p.image,
-        category: p.category?.name || "Lainnya",
-      }));
-
-      if (q) {
-        const search = q.toLowerCase();
-        mappedProducts = mappedProducts.filter(p => p.name.toLowerCase().includes(search));
-      }
-
-      return mappedProducts;
+      const res = await axiosInstance.get("/categories");
+      return res.data?.data || res.data || [];
     },
   });
 
-  const products = productsQ.data ?? [];
-
   const categories = useMemo(() => {
-    return ["Semua", ...Array.from(new Set(products.map((product) => product.category))).sort()];
-  }, [products]);
+    return ["Semua", ...categoriesData.map((c: any) => c.name)];
+  }, [categoriesData]);
 
-  const filteredProducts = useMemo(() => {
-    return category === "Semua"
-      ? products
-      : products.filter((product) => product.category === category);
-  }, [category, products]);
+  const productsQ = useQuery({
+    queryKey: ["pos", "products", q, category, currentPage],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("page", currentPage.toString());
+      params.set("limit", PRODUCT_PAGE_SIZE.toString());
+      if (q) params.set("search", q);
+      if (category !== "Semua") params.set("category", category);
 
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCT_PAGE_SIZE));
+      const response = await axiosInstance.get(`/products?${params.toString()}`);
+      return response.data;
+    },
+  });
 
-  const paginatedProducts = useMemo(() => {
-    const start = (productPage - 1) * PRODUCT_PAGE_SIZE;
-    return filteredProducts.slice(start, start + PRODUCT_PAGE_SIZE);
-  }, [filteredProducts, productPage]);
+  const rawProducts = productsQ.data?.data || [];
+  const totalPages = productsQ.data?.meta?.totalPages || 1;
+  const totalItems = productsQ.data?.meta?.total || 0;
+
+  const mappedProducts: Product[] = rawProducts.map((p: any) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    price: Number(p.price),
+    stock: p.stock,
+    image: p.image,
+    category: p.category?.name || "Lainnya",
+  }));
 
   const cartItemCount = items.reduce((sum, item) => sum + item.qty, 0);
 
@@ -160,33 +158,49 @@ const PosPage = () => {
       }).format(new Date(shift.startTime)) 
     : "-";
 
+  const handlePageChange = (newPage: number) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.set("page", newPage.toString());
+      return params;
+    });
+  };
+
+  const handleCategoryChange = (newCategory: string) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (newCategory === "Semua") params.delete("category");
+      else params.set("category", newCategory);
+      params.set("page", "1"); 
+      return params;
+    });
+  };
+
   const applyQuery = useCallback((next: string) => {
-    if (next) {
-      setSearchParams({ q: next }, { replace: true });
-    } else {
-      setSearchParams({}, { replace: true });
-    }
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next) params.set("q", next);
+      else params.delete("q");
+      params.set("page", "1"); 
+      return params;
+    }, { replace: true });
   }, [setSearchParams]);
 
   useEffect(() => {
-    setQuery(q);
-  }, [q]);
-
-  useEffect(() => {
-    setProductPage(1);
-  }, [q, category]);
-
-  useEffect(() => {
-    if (productPage > totalPages) {
-      setProductPage(totalPages);
+    if (currentPage > totalPages && totalPages > 0) {
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        params.set("page", totalPages.toString());
+        return params;
+      }, { replace: true });
     }
-  }, [productPage, totalPages]);
+  }, [currentPage, totalPages, setSearchParams]);
+
+  useEffect(() => { setQuery(q); }, [q]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (query !== q) {
-        applyQuery(query);
-      }
+      if (query !== q) applyQuery(query);
     }, 300);
     return () => clearTimeout(timer);
   }, [query, q, applyQuery]);
@@ -231,7 +245,7 @@ const PosPage = () => {
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-muted-foreground">
-                    {productsQ.isLoading ? "Memuat produk..." : `${filteredProducts.length} produk • halaman ${productPage}/${totalPages}`}
+                    {productsQ.isLoading ? "Memuat produk..." : `${totalItems} produk • halaman ${currentPage}/${totalPages}`}
                   </p>
                   {q && (
                     <Button variant="ghost" onClick={() => applyQuery("")}>
@@ -242,7 +256,16 @@ const PosPage = () => {
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {categories.map((item) => (
-                  <Button key={item} type="button" variant={category === item ? "default" : "outline"} size="sm" onClick={() => setCategory(item)} className="shrink-0" > {item} </Button>
+                  <Button 
+                    key={item} 
+                    type="button" 
+                    variant={category === item ? "default" : "outline"} 
+                    size="sm" 
+                    onClick={() => handleCategoryChange(item)} 
+                    className="shrink-0" 
+                  > 
+                    {item} 
+                  </Button>
                 ))}
               </div>
             </div>
@@ -253,17 +276,17 @@ const PosPage = () => {
                     <Skeleton key={index} className="h-52 rounded-2xl" />
                   ))}
                 </div>
-              ) : paginatedProducts.length > 0 ? (
+              ) : mappedProducts.length > 0 ? (
                 <>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                    {paginatedProducts.map((product) => (
+                    {mappedProducts.map((product) => (
                       <ProductCard key={product.id} product={product} onAdd={() => addToCart(product)} />
                     ))}
                   </div>
-                  <PaginationControls page={productPage} totalPages={totalPages} totalItems={filteredProducts.length} pageSize={PRODUCT_PAGE_SIZE} onPageChange={setProductPage} />
+                  <PaginationControls page={currentPage} totalPages={totalPages} totalItems={totalItems} pageSize={PRODUCT_PAGE_SIZE} onPageChange={handlePageChange} />
                 </>
               ) : (
-                <EmptyState icon={<PackageSearch className="h-6 w-6" />} title="Produk tidak ditemukan" description={q ? `Tidak ada hasil untuk "${q}".` : "Produk akan muncul di sini."} />
+                <EmptyState icon={<PackageSearch className="h-6 w-6" />} title="Produk tidak ditemukan" description={q || category !== "Semua" ? "Tidak ada hasil dengan filter saat ini." : "Produk akan muncul di sini."} />
               )}
             </CardContent>
           </Card>
@@ -406,7 +429,7 @@ const PosPage = () => {
             setReceipt(receipt);
             clearCart();
             setPayOpen(false);
-            qc.invalidateQueries({ queryKey: ["products"] });
+            qc.invalidateQueries({ queryKey: ["pos", "products"] });
             toast.success("Pembayaran berhasil");
           } catch (e: any) {
             toast.error(e.response?.data?.message || e.message || "Pembayaran gagal");

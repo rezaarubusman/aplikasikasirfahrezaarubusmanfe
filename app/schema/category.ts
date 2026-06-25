@@ -7,3 +7,5 @@ export const categorySchema = z.object({
     .min(2, "Nama kategori minimal 2 karakter")
     .max(40, "Nama kategori maksimal 40 karakter"),
 });
+
+export type CategoryFormValues = z.infer<typeof categorySchema>;

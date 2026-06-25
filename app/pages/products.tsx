@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,6 +15,8 @@ import { Card } from "~/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
+// Sesuaikan path import schema di bawah ini dengan struktur folder Anda
+import { productSchema, type ProductFormValues } from "~/schema/product";
 
 export interface Category {
   id: number;
@@ -34,14 +36,6 @@ export interface Product {
 }
 
 type StockMovementType = "IN" | "OUT" | "ADJUSTMENT";
-
-const productSchema = z.object({
-  name: z.string().trim().min(2, "Nama produk minimal 2 karakter").max(80, "Nama produk maksimal 80 karakter"),
-  categoryId: z.coerce.number({ message: "Kategori wajib dipilih" }).int().min(1, "Kategori wajib dipilih"),
-  price: z.coerce.number().min(0, "Harga tidak boleh bernilai negatif").max(100000000, "Harga maksimal Rp 100.000.000"),
-  stock: z.coerce.number().int().min(0, "Stok tidak boleh bernilai negatif").max(1000000, "Stok maksimal 1.000.000"),
-});
-type ProductFormValues = z.infer<typeof productSchema>;
 
 const stockSchema = z.object({
   type: z.enum(["IN", "ADJUSTMENT"], {
@@ -76,26 +70,24 @@ const ProductsPage = () => {
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [stockTarget, setStockTarget] = useState<Product | null>(null);
 
-  const { data: productsData, isLoading } = useQuery({
-    queryKey: ["admin", "products"],
+  // Perubahan: Menambahkan q dan currentPage ke queryKey agar otomatis re-fetch saat berubah
+  const { data: fetchResult, isLoading } = useQuery({
+    queryKey: ["admin", "products", q, currentPage],
     queryFn: async () => {
-      const res = await axiosInstance.get<{ data: Product[] }>("/products");
-      return res.data.data || res.data;
+      const params = new URLSearchParams();
+      params.set("page", currentPage.toString());
+      params.set("limit", PAGE_SIZE.toString());
+      if (q) params.set("search", q);
+
+      const res = await axiosInstance.get(`/products?${params.toString()}`);
+      return res.data;
     },
   });
 
-  const filteredProducts = useMemo(() => {
-    if (!productsData) return [];
-    if (!q) return productsData;
-    const lowerQ = q.toLowerCase();
-    return productsData.filter(
-      (p) =>
-        p.name.toLowerCase().includes(lowerQ) ||
-        p.category?.name.toLowerCase().includes(lowerQ)
-    );
-  }, [productsData, q]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+  // Ekstrak data dan meta dari response backend
+  const productsData: Product[] = fetchResult?.data || [];
+  const totalPages = fetchResult?.meta?.totalPages || 1;
+  const totalItems = fetchResult?.meta?.total || 0;
 
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
@@ -106,11 +98,6 @@ const ProductsPage = () => {
       }, { replace: true });
     }
   }, [currentPage, totalPages, setSearchParams]);
-
-  const paginatedProducts = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredProducts.slice(start, start + PAGE_SIZE);
-  }, [filteredProducts, currentPage]);
 
   const handlePageChange = (newPage: number) => {
     setSearchParams((prev) => {
@@ -253,14 +240,14 @@ const ProductsPage = () => {
                   <Loader2 className="inline h-4 w-4 animate-spin mr-2" /> Memuat…
                 </TableCell>
               </TableRow>
-            ) : paginatedProducts.length === 0 ? (
+            ) : productsData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
                   Produk tidak ditemukan.
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedProducts.map((p) => (
+              productsData.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell>
                     <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center overflow-hidden">
@@ -317,10 +304,10 @@ const ProductsPage = () => {
           </TableBody>
         </Table>
         
-        {!isLoading && filteredProducts.length > 0 && (
+        {!isLoading && totalItems > 0 && (
           <div className="flex items-center justify-between px-4 py-4 border-t">
             <div className="text-sm text-muted-foreground">
-              Menampilkan <span className="font-medium text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> hingga <span className="font-medium text-foreground">{Math.min(currentPage * PAGE_SIZE, filteredProducts.length)}</span> dari <span className="font-medium text-foreground">{filteredProducts.length}</span> produk
+              Menampilkan <span className="font-medium text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> hingga <span className="font-medium text-foreground">{Math.min(currentPage * PAGE_SIZE, totalItems)}</span> dari <span className="font-medium text-foreground">{totalItems}</span> produk
             </div>
             <div className="flex items-center gap-2">
               <Button

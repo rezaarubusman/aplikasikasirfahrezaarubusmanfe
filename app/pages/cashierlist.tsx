@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Pencil, Trash2, Loader2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -43,10 +43,15 @@ export function meta() {
   return [{ title: "Daftar Kasir — Aplikasi Kasir" }];
 }
 
+const PAGE_SIZE = 10;
+
 const CashiersPage = () => {
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q") || "";
+  const pageParam = searchParams.get("page");
+  const currentPage = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
+
   const [query, setQuery] = useState(q);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,12 +60,22 @@ const CashiersPage = () => {
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
 
   const applyQuery = useCallback((next: string) => {
-    if (next) {
-      setSearchParams({ q: next }, { replace: true });
-    } else {
-      setSearchParams({}, { replace: true });
-    }
+    setSearchParams((prevParams) => {
+      const newParams = new URLSearchParams(prevParams);
+      if (next) newParams.set("q", next);
+      else newParams.delete("q");
+      newParams.set("page", "1"); 
+      return newParams;
+    }, { replace: true });
   }, [setSearchParams]);
+
+  const handlePageChange = (newPage: number) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.set("page", newPage.toString());
+      return params;
+    });
+  };
 
   useEffect(() => {
     setQuery(q);
@@ -68,9 +83,7 @@ const CashiersPage = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (query !== q) {
-        applyQuery(query);
-      }
+      if (query !== q) applyQuery(query);
     }, 300);
     return () => clearTimeout(timer);
   }, [query, q, applyQuery]);
@@ -86,24 +99,33 @@ const CashiersPage = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin", "cashiers", q],
+  const { data: fetchResult, isLoading } = useQuery({
+    queryKey: ["admin", "cashiers", q, currentPage],
     queryFn: async () => {
-      const response = await axiosInstance.get('/users');
-      let users: User[] = response.data.data;
-      
-      users = users.filter((u) => u.role === "CASHIER");
-      
-      if (q) {
-        const lowerQ = q.toLowerCase();
-        users = users.filter((u) => 
-          u.name.toLowerCase().includes(lowerQ) || 
-          u.username.toLowerCase().includes(lowerQ)
-        );
-      }
-      return users;
+      const params = new URLSearchParams();
+      params.set("page", currentPage.toString());
+      params.set("limit", PAGE_SIZE.toString());
+      params.set("role", "CASHIER");
+      if (q) params.set("search", q);
+
+      const response = await axiosInstance.get(`/users?${params.toString()}`);
+      return response.data;
     },
   });
+
+  const cashiersData: User[] = fetchResult?.data || [];
+  const totalPages = fetchResult?.meta?.totalPages || 1;
+  const totalItems = fetchResult?.meta?.total || 0;
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        params.set("page", totalPages.toString());
+        return params;
+      }, { replace: true });
+    }
+  }, [currentPage, totalPages, setSearchParams]);
 
   const createMut = useMutation({
     mutationFn: async (v: CreateFormValues) => {
@@ -170,7 +192,7 @@ const CashiersPage = () => {
           <p className="text-sm text-muted-foreground">Kelola akun kasir</p>
         </div>
         <Button onClick={openCreate}>
-          <Plus className="h-4 w-4" /> Tambah kasir
+          <Plus className="h-4 w-4 mr-2" /> Tambah kasir
         </Button>
       </div>
 
@@ -210,14 +232,14 @@ const CashiersPage = () => {
                   <Loader2 className="inline h-4 w-4 animate-spin mr-2" /> Memuat…
                 </TableCell>
               </TableRow>
-            ) : !data || data.length === 0 ? (
+            ) : cashiersData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
                   Kasir tidak ditemukan.
                 </TableCell>
               </TableRow>
             ) : (
-              data.map((c) => (
+              cashiersData.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.name}</TableCell>
                   <TableCell className="text-muted-foreground">{c.username}</TableCell>
@@ -247,6 +269,35 @@ const CashiersPage = () => {
             )}
           </TableBody>
         </Table>
+
+        {!isLoading && totalItems > 0 && (
+          <div className="flex items-center justify-between px-4 py-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Menampilkan <span className="font-medium text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> hingga <span className="font-medium text-foreground">{Math.min(currentPage * PAGE_SIZE, totalItems)}</span> dari <span className="font-medium text-foreground">{totalItems}</span> kasir
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage <= 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+              </Button>
+              <div className="text-sm font-medium px-2">
+                Hal {currentPage} / {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <CashierFormDialog

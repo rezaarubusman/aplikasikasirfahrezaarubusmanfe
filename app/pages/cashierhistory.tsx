@@ -308,7 +308,6 @@ const HistoryPage = () => {
                   </TableBody>
                 </Table>
                 
-                {/* Komponen Paginasi */}
                 {totalItems > 0 && (
                   <div className="flex items-center justify-between px-4 py-4 border-t">
                     <div className="text-sm text-muted-foreground">

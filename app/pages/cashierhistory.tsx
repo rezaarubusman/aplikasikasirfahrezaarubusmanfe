@@ -1,7 +1,7 @@
 import { useNavigate, useSearchParams } from "react-router";
-import { useEffect, useMemo, useState, useRef, useCallback, type ReactNode } from "react";
+import { useEffect, useState, useRef, useCallback, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Banknote, CalendarDays, CreditCard, Hash, Receipt, Search, ShoppingBag, TrendingUp } from "lucide-react";
+import { Banknote, CalendarDays, CreditCard, Hash, Receipt, Search, ShoppingBag, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "~/components/ui/input";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
@@ -96,15 +96,21 @@ export function meta() {
   return [{ title: "Transaksi Hari Ini — Aplikasi Kasir" }];
 }
 
+const PAGE_SIZE = 10;
+
 const HistoryPage = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const q = searchParams.get("q") || "";
   const navigate = useNavigate();
   const user = useAuth((s) => s.user);
+  
+  const [searchParams, setSearchParams] = useSearchParams();
+  const q = searchParams.get("q") || "";
+  const pageParam = searchParams.get("page");
+  const currentPage = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
+
   const [query, setQuery] = useState(q);
   const [openTx, setOpenTx] = useState<Transaction | null>(null);
-
   const searchInputRef = useRef<HTMLInputElement>(null);
+  
   const today = new Date().toISOString().slice(0, 10);
   const readableToday = new Intl.DateTimeFormat("id-ID", {
     weekday: "long",
@@ -114,43 +120,54 @@ const HistoryPage = () => {
   }).format(new Date());
 
   const txQ = useQuery({
-    queryKey: ["cashier-tx", user?.id, today, q],
+    queryKey: ["cashier-tx", user?.id, today, q, currentPage],
     queryFn: async () => {
-      const response = await axiosInstance.get("/transactions");
-      const data = response.data?.data ?? response.data ?? [];
-      const keyword = q.trim().toLowerCase();
+      const params = new URLSearchParams();
+      params.set("page", currentPage.toString());
+      params.set("limit", PAGE_SIZE.toString());
+      params.set("date", today);
+      if (q) params.set("search", q);
 
-      return (Array.isArray(data) ? data : [])
-        .map(mapTransaction)
-        .filter((transaction) => transaction.createdAt.slice(0, 10) === today)
-        .filter((transaction) => (keyword ? transaction.id.toLowerCase().includes(keyword) : true));
+      const response = await axiosInstance.get(`/transactions?${params.toString()}`);
+      return response.data;
     },
     enabled: !!user,
   });
 
-  const transactions = txQ.data ?? [];
-  const summary = useMemo(() => {
-    return transactions.reduce(
-      (acc, tx) => {
-        acc.total += tx.total;
-        acc.items += tx.items.reduce((sum, item) => sum + item.qty, 0);
-        acc[tx.paymentType] += 1;
-        return acc;
-      },
-      { total: 0, items: 0, cash: 0, debit: 0 } as Record<PaymentType, number> & {
-        total: number;
-        items: number;
-      },
-    );
-  }, [transactions]);
+  const rawTransactions = txQ.data?.data ?? [];
+  const transactions: Transaction[] = rawTransactions.map(mapTransaction);
+  
+  const totalItems = txQ.data?.meta?.total ?? 0;
+  const totalPages = txQ.data?.meta?.totalPages ?? 1;
+  const summary = txQ.data?.meta?.summary ?? { total: 0, items: 0, cash: 0, debit: 0 };
+
+  const handlePageChange = (newPage: number) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.set("page", newPage.toString());
+      return params;
+    });
+  };
 
   const applyQuery = useCallback((next: string) => {
-    if (next) {
-      setSearchParams({ q: next }, { replace: true });
-    } else {
-      setSearchParams({}, { replace: true });
-    }
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next) params.set("q", next);
+      else params.delete("q");
+      params.set("page", "1"); 
+      return params;
+    }, { replace: true });
   }, [setSearchParams]);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        params.set("page", totalPages.toString());
+        return params;
+      }, { replace: true });
+    }
+  }, [currentPage, totalPages, setSearchParams]);
 
   useEffect(() => {
     setQuery(q);
@@ -158,9 +175,7 @@ const HistoryPage = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (query !== q) {
-        applyQuery(query);
-      }
+      if (query !== q) applyQuery(query);
     }, 300);
     return () => clearTimeout(timer);
   }, [query, q, applyQuery]);
@@ -205,7 +220,7 @@ const HistoryPage = () => {
             ))
           ) : (
             <>
-              <SummaryCard icon={<Receipt className="h-5 w-5" />} label="Transaksi" value={String(transactions.length)} />
+              <SummaryCard icon={<Receipt className="h-5 w-5" />} label="Transaksi" value={String(totalItems)} />
               <SummaryCard icon={<TrendingUp className="h-5 w-5" />} label="Omzet" value={rupiah(summary.total)} strong />
               <SummaryCard icon={<ShoppingBag className="h-5 w-5" />} label="Item terjual" value={String(summary.items)} />
               <SummaryCard
@@ -231,7 +246,7 @@ const HistoryPage = () => {
             </div>
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm text-muted-foreground">
-                {txQ.isLoading ? "Memuat transaksi..." : `${transactions.length} hasil ditemukan`}
+                {txQ.isLoading ? "Memuat transaksi..." : `${totalItems} transaksi • halaman ${currentPage}/${totalPages}`}
               </p>
               {q && (
                 <Button variant="ghost" onClick={() => applyQuery("")}>
@@ -248,64 +263,98 @@ const HistoryPage = () => {
                 ))}
               </div>
             ) : transactions.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID Transaksi</TableHead>
-                    <TableHead>Waktu</TableHead>
-                    <TableHead className="text-right">Item</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead>Pembayaran</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.map((tx) => (
-                    <TableRow
-                      key={tx.id}
-                      className="cursor-pointer transition-colors hover:bg-muted/50"
-                      onClick={() => setOpenTx(tx)}
-                    >
-                      <TableCell className="font-mono text-xs">{tx.id}</TableCell>
-                      <TableCell className="text-sm">
-                        {new Date(tx.createdAt).toLocaleTimeString("id-ID", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </TableCell>
-                      <TableCell className="text-right text-sm">
-                        {tx.items.reduce((sum, item) => sum + item.qty, 0)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-semibold">
-                        {rupiah(tx.total)}
-                      </TableCell>
-                      <TableCell>
-                        <PaymentBadge type={tx.paymentType} />
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="border-0 bg-emerald-500/15 text-emerald-700">
-                          Selesai
-                        </Badge>
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID Transaksi</TableHead>
+                      <TableHead>Waktu</TableHead>
+                      <TableHead className="text-right">Item</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead>Pembayaran</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {transactions.map((tx) => (
+                      <TableRow
+                        key={tx.id}
+                        className="cursor-pointer transition-colors hover:bg-muted/50"
+                        onClick={() => setOpenTx(tx)}
+                      >
+                        <TableCell className="font-mono text-xs">{tx.id}</TableCell>
+                        <TableCell className="text-sm">
+                          {new Date(tx.createdAt).toLocaleTimeString("id-ID", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {tx.items.reduce((sum, item) => sum + item.qty, 0)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-semibold">
+                          {rupiah(tx.total)}
+                        </TableCell>
+                        <TableCell>
+                          <PaymentBadge type={tx.paymentType} />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="border-0 bg-emerald-500/15 text-emerald-700">
+                            Selesai
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                
+                {/* Komponen Paginasi */}
+                {totalItems > 0 && (
+                  <div className="flex items-center justify-between px-4 py-4 border-t">
+                    <div className="text-sm text-muted-foreground">
+                      Menampilkan <span className="font-medium text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> hingga <span className="font-medium text-foreground">{Math.min(currentPage * PAGE_SIZE, totalItems)}</span> dari <span className="font-medium text-foreground">{totalItems}</span> transaksi
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage <= 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+                      </Button>
+                      <div className="text-sm font-medium px-2">
+                        Hal {currentPage} / {totalPages}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage >= totalPages}
+                      >
+                        Next <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <Receipt className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="font-semibold">Belum ada transaksi</h3>
+                  <h3 className="font-semibold">{q ? "Pencarian tidak ditemukan" : "Belum ada transaksi"}</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Penjualan yang selesai hari ini akan muncul di sini.
+                    {q ? "Coba gunakan kata kunci atau ID lain." : "Penjualan yang selesai hari ini akan muncul di sini."}
                   </p>
                 </div>
-                <Button className="gap-2" onClick={() => navigate("/cashierpos")}>
-                  <ShoppingBag className="h-4 w-4" />
-                  Mulai transaksi
-                </Button>
+                {!q && (
+                  <Button className="gap-2" onClick={() => navigate("/cashierpos")}>
+                    <ShoppingBag className="h-4 w-4" />
+                    Mulai transaksi
+                  </Button>
+                )}
               </div>
             )}
           </CardContent>

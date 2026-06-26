@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
-import { Loader2, AlertCircle, CheckCircle2, Info } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, Info, ChevronLeft, ChevronRight } from "lucide-react";
 import { axiosInstance } from "~/lib/axios"; 
 import { Card } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
@@ -54,12 +54,17 @@ export function meta() {
   return [{ title: "Laporan Shift & Kasir — Aplikasi Kasir" }];
 }
 
+const PAGE_SIZE = 10;
+
 const CashierReport = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   
   const startDateParam = searchParams.get("startDate");
   const endDateParam = searchParams.get("endDate");
   const cashierIdParam = searchParams.get("cashierId");
+  const pageParam = searchParams.get("page");
+  
+  const currentPage = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
   
   const [range, setRange] = useState<{ from: string; to: string }>({
     from: startDateParam || defaultRange().from,
@@ -69,19 +74,28 @@ const CashierReport = () => {
   const [selectedCashier, setSelectedCashier] = useState<string>(cashierIdParam || "all");
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams);
-    
-    if (range.from) params.set("startDate", range.from);
-    else params.delete("startDate");
-    
-    if (range.to) params.set("endDate", range.to);
-    else params.delete("endDate");
+  const handlePageChange = (newPage: number) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.set("page", newPage.toString());
+      return params;
+    });
+  };
 
-    if (selectedCashier && selectedCashier !== "all") params.set("cashierId", selectedCashier);
-    else params.delete("cashierId");
-    
-    setSearchParams(params, { replace: true });
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (range.from) params.set("startDate", range.from);
+      else params.delete("startDate");
+      
+      if (range.to) params.set("endDate", range.to);
+      else params.delete("endDate");
+
+      if (selectedCashier && selectedCashier !== "all") params.set("cashierId", selectedCashier);
+      else params.delete("cashierId");
+      
+      return params;
+    }, { replace: true });
   }, [range.from, range.to, selectedCashier, setSearchParams]);
 
   const { data: cashiersList, isLoading: isLoadingCashiers } = useQuery({
@@ -114,6 +128,18 @@ const CashierReport = () => {
     enabled: !!selectedShiftId, 
   });
 
+  const shiftList = shiftData || [];
+  const totalItems = shiftList.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  
+  const paginatedShifts = shiftList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      handlePageChange(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   return (
     <div className="px-6 py-6 space-y-6 max-w-7xl mx-auto">
       <div>
@@ -124,13 +150,27 @@ const CashierReport = () => {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 items-end bg-card p-4 rounded-xl border shadow-sm">
-        <DateRangeControls from={range.from} to={range.to} onChange={setRange} />
+        <DateRangeControls 
+          from={range.from} 
+          to={range.to} 
+          onChange={(newRange) => {
+            setRange(newRange);
+            handlePageChange(1); // Reset ke hal 1 saat filter diubah
+          }} 
+        />
         
         <div className="space-y-1.5 min-w-[200px]">
           <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
             Filter Kasir
           </label>
-          <Select value={selectedCashier} onValueChange={setSelectedCashier} disabled={isLoadingCashiers}>
+          <Select 
+            value={selectedCashier} 
+            onValueChange={(val) => {
+              setSelectedCashier(val);
+              handlePageChange(1); // Reset ke hal 1 saat filter diubah
+            }} 
+            disabled={isLoadingCashiers}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Pilih Kasir" />
             </SelectTrigger>
@@ -170,14 +210,14 @@ const CashierReport = () => {
                   <Loader2 className="inline h-4 w-4 animate-spin mr-2" /> Memuat data dari database…
                 </TableCell>
               </TableRow>
-            ) : !shiftData || shiftData.length === 0 ? (
+            ) : totalItems === 0 ? (
               <TableRow>
                 <TableCell colSpan={11} className="text-center py-10 text-muted-foreground">
                   Belum ada data shift pada filter saat ini.
                 </TableCell>
               </TableRow>
             ) : (
-              shiftData.map((r) => (
+              paginatedShifts.map((r) => (
                 <TableRow key={r.shiftId}>
                   <TableCell className="text-sm">
                     <div className="font-medium">
@@ -224,6 +264,35 @@ const CashierReport = () => {
             )}
           </TableBody>
         </Table>
+        
+        {!isLoadingShifts && totalItems > 0 && (
+          <div className="flex items-center justify-between px-4 py-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Menampilkan <span className="font-medium text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> hingga <span className="font-medium text-foreground">{Math.min(currentPage * PAGE_SIZE, totalItems)}</span> dari <span className="font-medium text-foreground">{totalItems}</span> laporan
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage <= 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+              </Button>
+              <div className="text-sm font-medium px-2">
+                Hal {currentPage} / {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Dialog open={!!selectedShiftId} onOpenChange={(open) => !open && setSelectedShiftId(null)}>

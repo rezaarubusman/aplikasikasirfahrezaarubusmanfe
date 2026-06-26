@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router";
+import { useSearchParams, useNavigate } from "react-router";
 import { Loader2, AlertCircle, CheckCircle2, Info, ChevronLeft, ChevronRight } from "lucide-react";
 import { axiosInstance } from "~/lib/axios"; 
 import { Card } from "~/components/ui/card";
@@ -8,7 +8,6 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { DateRangeControls, defaultRange } from "~/components/admin/date-range";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 
 export const rupiah = (number: number) => {
@@ -34,22 +33,6 @@ interface ShiftReport {
   isMatch: boolean;
 }
 
-interface TransactionItem {
-  id: string;
-  quantity: number;
-  subtotal: number | string;
-  product: { name: string };
-}
-
-interface TransactionDetail {
-  id: string;
-  invoiceNumber: string;
-  totalAmount: number | string;
-  paymentMethod: string;
-  createdAt: string;
-  transactionItems: TransactionItem[];
-}
-
 export function meta() {
   return [{ title: "Laporan Shift & Kasir — Aplikasi Kasir" }];
 }
@@ -58,6 +41,7 @@ const PAGE_SIZE = 10;
 
 const CashierReport = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate(); 
   
   const startDateParam = searchParams.get("startDate");
   const endDateParam = searchParams.get("endDate");
@@ -72,7 +56,6 @@ const CashierReport = () => {
   });
 
   const [selectedCashier, setSelectedCashier] = useState<string>(cashierIdParam || "all");
-  const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
 
   const handlePageChange = (newPage: number) => {
     setSearchParams((prev) => {
@@ -119,15 +102,6 @@ const CashierReport = () => {
     },
   });
 
-  const { data: transactionData, isLoading: isLoadingTransactions } = useQuery<TransactionDetail[]>({
-    queryKey: ["admin", "transactions", selectedShiftId],
-    queryFn: async () => {
-      const response = await axiosInstance.get(`/transactions?shiftId=${selectedShiftId}`);
-      return (response.data.data || response.data) as TransactionDetail[]; 
-    },
-    enabled: !!selectedShiftId, 
-  });
-
   const shiftList = shiftData || [];
   const totalItems = shiftList.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
@@ -155,19 +129,17 @@ const CashierReport = () => {
           to={range.to} 
           onChange={(newRange) => {
             setRange(newRange);
-            handlePageChange(1); // Reset ke hal 1 saat filter diubah
+            handlePageChange(1);
           }} 
         />
         
         <div className="space-y-1.5 min-w-[200px]">
-          <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-            Filter Kasir
-          </label>
+          <label className="text-xs font-medium leading-none">Filter Kasir</label>
           <Select 
             value={selectedCashier} 
             onValueChange={(val) => {
               setSelectedCashier(val);
-              handlePageChange(1); // Reset ke hal 1 saat filter diubah
+              handlePageChange(1);
             }} 
             disabled={isLoadingCashiers}
           >
@@ -207,7 +179,7 @@ const CashierReport = () => {
             {isLoadingShifts ? (
               <TableRow>
                 <TableCell colSpan={11} className="text-center py-10 text-muted-foreground">
-                  <Loader2 className="inline h-4 w-4 animate-spin mr-2" /> Memuat data dari database…
+                  <Loader2 className="inline h-4 w-4 animate-spin mr-2" /> Memuat data...
                 </TableCell>
               </TableRow>
             ) : totalItems === 0 ? (
@@ -244,7 +216,7 @@ const CashierReport = () => {
                         <CheckCircle2 className="h-3 w-3 mr-1" /> Sesuai
                       </Badge>
                     ) : (
-                      <Badge variant="destructive" className="bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20">
+                      <Badge variant="destructive" className="bg-destructive/10 text-destructive border-destructive/20">
                         <AlertCircle className="h-3 w-3 mr-1" /> Selisih
                       </Badge>
                     )}
@@ -253,7 +225,7 @@ const CashierReport = () => {
                     <Button 
                       variant="ghost" 
                       size="sm" 
-                      onClick={() => setSelectedShiftId(r.shiftId)}
+                      onClick={() => navigate(`/shifttransaction/${r.shiftId}`)}
                       title="Lihat Detail Transaksi"
                     >
                       <Info className="h-4 w-4" />
@@ -268,83 +240,20 @@ const CashierReport = () => {
         {!isLoadingShifts && totalItems > 0 && (
           <div className="flex items-center justify-between px-4 py-4 border-t">
             <div className="text-sm text-muted-foreground">
-              Menampilkan <span className="font-medium text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> hingga <span className="font-medium text-foreground">{Math.min(currentPage * PAGE_SIZE, totalItems)}</span> dari <span className="font-medium text-foreground">{totalItems}</span> laporan
+              Menampilkan <span className="font-medium">{(currentPage - 1) * PAGE_SIZE + 1}</span> hingga <span className="font-medium">{Math.min(currentPage * PAGE_SIZE, totalItems)}</span> dari <span className="font-medium">{totalItems}</span> laporan
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage <= 1}
-              >
+              <Button variant="outline" size="sm" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage <= 1}>
                 <ChevronLeft className="h-4 w-4 mr-1" /> Prev
               </Button>
-              <div className="text-sm font-medium px-2">
-                Hal {currentPage} / {totalPages}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage >= totalPages}
-              >
+              <div className="text-sm font-medium px-2">Hal {currentPage} / {totalPages}</div>
+              <Button variant="outline" size="sm" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage >= totalPages}>
                 Next <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
           </div>
         )}
       </Card>
-
-      <Dialog open={!!selectedShiftId} onOpenChange={(open) => !open && setSelectedShiftId(null)}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detail Transaksi Shift</DialogTitle>
-            <DialogDescription>
-              Rincian seluruh struk transaksi yang terjadi pada shift ini.
-            </DialogDescription>
-          </DialogHeader>
-
-          {isLoadingTransactions ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : !transactionData || transactionData.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
-              Tidak ada transaksi pada shift ini.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {transactionData.map((tx: TransactionDetail) => (
-                <Card key={tx.id} className="p-4 bg-muted/30">
-                  <div className="flex justify-between items-start mb-3 border-b pb-2">
-                    <div>
-                      <div className="font-semibold">{tx.invoiceNumber}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(tx.createdAt).toLocaleString("id-ID")}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge variant={tx.paymentMethod === "CASH" ? "default" : "secondary"}>
-                        {tx.paymentMethod}
-                      </Badge>
-                      <div className="font-bold font-mono mt-1">{rupiah(Number(tx.totalAmount))}</div>
-                    </div>
-                  </div>
-                  
-                  <div className="text-sm space-y-1">
-                    {tx.transactionItems.map((item: TransactionItem) => (
-                      <div key={item.id} className="flex justify-between text-muted-foreground">
-                        <span>{item.quantity}x {item.product.name}</span>
-                        <span className="font-mono">{rupiah(Number(item.subtotal))}</span>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { toast } from "sonner";
-import { AlertTriangle, Banknote, Calculator, CheckCircle2, Clock, Loader2, LogOut, ReceiptText, ShieldCheck, StopCircle, WalletCards } from "lucide-react";
+import { AlertTriangle, Banknote, Calculator, CheckCircle2, Clock, Loader2, LogOut, ReceiptText, ShieldCheck, StopCircle, WalletCards, CreditCard } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -70,12 +70,17 @@ const EndShiftPage = () => {
         .filter((t: any) => t.paymentMethod === "CASH")
         .reduce((sum: number, t: any) => sum + Number(t.totalAmount), 0);
 
+      const totalDebitTransactions = transactions
+        .filter((t: any) => t.paymentMethod === "DEBIT")
+        .reduce((sum: number, t: any) => sum + Number(t.totalAmount), 0);
+
       const openingCash = Number(shiftData.initialCash);
       const expectedClosing = openingCash + totalCashTransactions;
 
       return {
         shift: { openingCash },
         totalCashTransactions,
+        totalDebitTransactions, 
         expectedClosing,
       };
     },
@@ -163,9 +168,9 @@ const EndShiftPage = () => {
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
             {summaryQ.isLoading || !summaryQ.data ? (
-              Array.from({ length: 3 }).map((_, index) => (
+              Array.from({ length: 4 }).map((_, index) => ( 
                 <Skeleton key={index} className="h-28 rounded-2xl" />
               ))
             ) : (
@@ -179,6 +184,11 @@ const EndShiftPage = () => {
                   icon={<ReceiptText className="h-5 w-5" />}
                   label="Transaksi tunai"
                   value={rupiah(summaryQ.data.totalCashTransactions)}
+                />
+                <SummaryCard
+                  icon={<CreditCard className="h-5 w-5" />}
+                  label="Transaksi debit"
+                  value={rupiah(summaryQ.data.totalDebitTransactions)}
                 />
                 <SummaryCard
                   icon={<Calculator className="h-5 w-5" />}
@@ -207,7 +217,7 @@ const EndShiftPage = () => {
                 noValidate
               >
                 <div className="space-y-2">
-                  <Label htmlFor="closingCash">Kas penutupan (Rp)</Label>
+                  <Label htmlFor="closingCash">Kas penutupan aktual (Rp)</Label>
                   <Input
                     id="closingCash"
                     type="number"
@@ -255,7 +265,6 @@ const EndShiftPage = () => {
               </div>
             </div>
           </div>
-
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <h2 className="font-semibold">Checklist penutupan</h2>
             <div className="mt-4 space-y-3">

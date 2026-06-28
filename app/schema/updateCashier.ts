@@ -6,5 +6,5 @@ export const updateCashierSchema = z.object({
     .string()
     .min(8, "Password minimal 8 karakter")
     .optional()
-    .or(z.literal("")), // Boleh kosong jika password tidak diubah
+    .or(z.literal("")), 
 });

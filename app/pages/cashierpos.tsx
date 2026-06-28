@@ -223,9 +223,6 @@ const PosPage = () => {
           <div className="rounded-2xl border bg-card/80 p-5 shadow-sm backdrop-blur">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <Badge variant="outline" className="mb-3 gap-1"> 
-                  <Sparkles className="h-3.5 w-3.5" /> Cashier workbench
-                </Badge>
                 <h1 className="text-2xl font-bold tracking-tight">POS Penjualan</h1>
                 <p className="mt-1 text-sm text-muted-foreground">Tambahkan produk ke pesanan, lalu proses pembayaran dengan cepat.</p>
               </div>
@@ -291,8 +288,8 @@ const PosPage = () => {
             </CardContent>
           </Card>
         </section>
-        <aside className="xl:sticky xl:top-[4.5rem] xl:self-start">
-          <Card className="flex max-h-[calc(100vh-6rem)] overflow-hidden rounded-2xl shadow-sm xl:min-h-[calc(100vh-6rem)]">
+        <aside className="sticky top-[4.5rem] self-start z-10">
+          <Card className="flex max-h-[calc(100vh-6rem)] rounded-2xl shadow-sm min-h-[calc(100vh-6rem)]">
             <div className="flex w-full flex-col">
               <div className="flex items-center justify-between border-b bg-muted/20 px-4 py-3">
                 <div className="flex items-center gap-2">

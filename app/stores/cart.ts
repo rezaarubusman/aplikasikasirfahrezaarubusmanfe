@@ -17,7 +17,6 @@ export interface CartLine {
 
 interface CartState {
   items: CartLine[];
-  // Ubah parameter (p: Product) menjadi (p: CartProduct)
   add: (p: CartProduct) => void; 
   setQty: (productId: string, qty: number) => void;
   remove: (productId: string) => void;

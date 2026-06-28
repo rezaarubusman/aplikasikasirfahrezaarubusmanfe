@@ -15,7 +15,6 @@ import { Card } from "~/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
-// Sesuaikan path import schema di bawah ini dengan struktur folder Anda
 import { productSchema, type ProductFormValues } from "~/schema/product";
 
 export interface Category {
@@ -70,7 +69,6 @@ const ProductsPage = () => {
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [stockTarget, setStockTarget] = useState<Product | null>(null);
 
-  // Perubahan: Menambahkan q dan currentPage ke queryKey agar otomatis re-fetch saat berubah
   const { data: fetchResult, isLoading } = useQuery({
     queryKey: ["admin", "products", q, currentPage],
     queryFn: async () => {
@@ -84,7 +82,6 @@ const ProductsPage = () => {
     },
   });
 
-  // Ekstrak data dan meta dari response backend
   const productsData: Product[] = fetchResult?.data || [];
   const totalPages = fetchResult?.meta?.totalPages || 1;
   const totalItems = fetchResult?.meta?.total || 0;

@@ -143,10 +143,10 @@ const StartShiftPage = () => {
                   Shift kasir
                 </Badge>
                 <h1 className="text-2xl font-bold tracking-tight">
-                  Selamat datang, {user?.name ?? "Kasir"}
+                  Selamat datang.
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Siapkan modal awal sebelum masuk ke halaman POS.
+                  Hitung modal awal sebelum memulai shift.
                 </p>
               </div>
               <div className="rounded-xl bg-primary/10 px-4 py-3 text-sm text-primary">
@@ -164,7 +164,7 @@ const StartShiftPage = () => {
                 <PlayCircle className="h-5 w-5" />
               </div>
               <CardTitle className="mt-3">Mulai shift Anda</CardTitle>
-              <CardDescription>Hitung laci kas dan masukkan jumlah awal.</CardDescription>
+              <CardDescription className="font-bold underline">Hitung laci kas dan masukkan jumlah awal.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5 p-5">
               <div className="rounded-xl border bg-background p-4">
@@ -241,14 +241,14 @@ const StartShiftPage = () => {
           <InfoCard
             icon={<Calculator className="h-5 w-5" />}
             title="Checklist sebelum mulai"
-            description="Pastikan modal awal sesuai kas fisik di laci."
+            description="Pastikan modal awal sesuai uang fisik di laci."
           />
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <h2 className="font-semibold">Persiapan cepat</h2>
             <div className="mt-4 space-y-3">
               <ChecklistItem icon={<Banknote className="h-4 w-4" />} text="Hitung uang tunai pembuka." />
               <ChecklistItem icon={<ReceiptText className="h-4 w-4" />} text="Pastikan printer dan struk siap." />
-              <ChecklistItem icon={<ShieldCheck className="h-4 w-4" />} text="Mulai hanya saat kas sudah cocok." />
+              <ChecklistItem icon={<ShieldCheck className="h-4 w-4" />} text="Mulai hanya saat uang sudah cocok." />
             </div>
           </div>
         </aside>

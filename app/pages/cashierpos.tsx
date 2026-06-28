@@ -224,7 +224,7 @@ const PosPage = () => {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">POS Penjualan</h1>
-                <p className="mt-1 text-sm text-muted-foreground">Tambahkan produk ke pesanan, lalu proses pembayaran dengan cepat.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Tambahkan produk ke pesanan.</p>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <HeaderStat icon={<Clock className="h-4 w-4" />} label="Shift mulai" value={shiftStartedAt} />

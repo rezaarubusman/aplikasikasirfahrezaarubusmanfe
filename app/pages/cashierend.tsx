@@ -105,14 +105,13 @@ const EndShiftPage = () => {
     
     try {
       const finalCash = Number(form.getValues("closingCash"));
+        await axiosInstance.patch(`/shifts/${shift.id}/close`, {
+          finalCash,
+        });
 
-      await axiosInstance.patch(`/shifts/${shift.id}/close`, {
-        finalCash,
-      });
-
-      try {
-        await axiosInstance.post("/auth/logout");
-      } catch (logoutError) {
+        try {
+          await axiosInstance.post("/auth/logout");
+        } catch (logoutError) {
       }
 
       setActive(null);
@@ -158,7 +157,7 @@ const EndShiftPage = () => {
                 </Badge>
                 <h1 className="text-2xl font-bold tracking-tight">Akhiri shift Anda</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Cocokkan kas fisik dengan ekspektasi sebelum keluar dari sistem.
+                  Cocokkan uang fisik dengan ekspektasi sistem sebelum keluar.
                 </p>
               </div>
               <div className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -205,8 +204,8 @@ const EndShiftPage = () => {
               <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
                 <StopCircle className="h-5 w-5" />
               </div>
-              <CardTitle className="mt-3">Hitung kas penutupan</CardTitle>
-              <CardDescription>Masukkan uang tunai aktual di laci kas.</CardDescription>
+              <CardTitle className="mt-3">Hitung uang tunai penutupan</CardTitle>
+              <CardDescription className="font-bold underline">Masukkan uang tunai aktual di laci kas.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5 p-5">
               <DifferencePanel difference={difference} state={differenceState} loading={!summaryQ.data} />
@@ -217,7 +216,7 @@ const EndShiftPage = () => {
                 noValidate
               >
                 <div className="space-y-2">
-                  <Label htmlFor="closingCash">Kas penutupan aktual (Rp)</Label>
+                  <Label htmlFor="closingCash">Uang penutupan aktual (Rp)</Label>
                   <Input
                     id="closingCash"
                     type="number"
